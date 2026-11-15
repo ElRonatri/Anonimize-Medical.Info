@@ -19,6 +19,8 @@ epicrisis, informes, etc.), **anonimiza los datos del paciente** y devuelve el r
 | Salida | Markdown (títulos, listas, tablas de laboratorio) o texto plano; copiar o guardar `.md`/`.txt` |
 | Datos detectados | nombre del paciente, familiares y contactos, RUT/RUN, DNI, NIE, CURP, cédula, SSN, pasaporte, N° de ficha / historia clínica / MRN, fecha de nacimiento, teléfonos, correos, direcciones y localidades, URLs, IPs |
 | Opcional | nombres de profesionales (médicos, firmantes), todas las fechas, términos personalizados |
+| Por país (opcional) | selector de región/país: formatos validados con dígito verificador (RUN/RUT, CUIL, CPF, CNS, CURP, RFC, CI de Venezuela/Uruguay/Ecuador, SSN, MBI, SIN, DNI/NIE, NIR, Codice Fiscale, NINO, NHS, personnummer, HETU, AHV, Aadhaar, PAN, ID china, RRN, NRIC, HKID, CNIC, Emirates ID), pasaportes MRZ y más de 150 palabras clave de documentos de todo el mundo |
+| Números largos (opcional) | oculta cualquier secuencia de 7+ dígitos, respetando fechas |
 | Marcadores | numerados y consistentes (`[PACIENTE_1]`, `[PERSONA_2]`) o genéricos (`[PACIENTE]`) |
 | Revisión | lista de datos detectados (valores originales ocultos por defecto); marca falsos positivos para no anonimizarlos; edición manual del resultado |
 | Limpieza | elimina encabezados/pies de página repetidos y números de página |
@@ -33,7 +35,11 @@ epicrisis, informes, etc.), **anonimiza los datos del paciente** y devuelve el r
 3. **Propagación:** cada nombre o apellido encontrado se busca en todo el documento, sin
    importar tildes ni mayúsculas (`PÉREZ`, `Perez`, `Sr. Pérez`), sólo cuando aparece con
    mayúscula inicial para no tocar palabras comunes (*rosa*, *blanco*).
-4. Los valores clínicos (resultados de laboratorio, signos vitales, dosis, fechas de atención) se
+4. **Por país (opcional):** al elegir un país o región se activan sus formatos estructurales
+   (validados con dígito verificador, sin necesidad de etiqueta) y la detección por palabra
+   clave (`CC 1020304050`, `PESEL 44051401359`, `Pasaporte N° AB1234567`). Ver
+   `backend/anonymizer/identifiers.py`.
+5. Los valores clínicos (resultados de laboratorio, signos vitales, dosis, fechas de atención) se
    conservan.
 
 > ⚠️ La detección es automática y basada en reglas: **revisa siempre el resultado antes de
@@ -91,6 +97,7 @@ backend/
   anonymizer/
     extract.py          PDF/TXT -> líneas y tablas (pdfplumber), OCR opcional
     rules.py            etiquetas ES/EN y patrones de identificadores
+    identifiers.py      documentos por país (validadores, palabras clave, capa agresiva)
     detector.py         detección, propagación de nombres y reemplazo
     render.py           salida Markdown / texto, limpieza de encabezados
     pipeline.py         orquestación

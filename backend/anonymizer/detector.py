@@ -6,7 +6,7 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 
-from . import rules
+from . import identifiers, rules
 from .lang import PLACEHOLDERS
 
 NAME_CATEGORIES = ("PATIENT", "PERSON", "PROFESSIONAL")
@@ -68,6 +68,8 @@ class Options:
     anonymize_addresses: bool = True
     remove_repeated: bool = True
     page_markers: bool = True
+    region: str = "general"  # general | all | latam | europe | ... | código ISO de país
+    aggressive_numbers: bool = False  # ocultar cualquier secuencia de >= 7 dígitos
     custom_terms: list[str] = field(default_factory=list)
     exclude: list[str] = field(default_factory=list)
 
@@ -92,6 +94,7 @@ class Literal:
     value: str
     pattern: re.Pattern
     name_token: bool = False  # exige mayúscula inicial en la coincidencia
+    label: str | None = None  # marcador específico (p. ej. RUN_CL, PASAPORTE)
 
 
 class Knowledge:
@@ -108,7 +111,7 @@ class Knowledge:
         return norm(value) in self.excluded or norm_digits(value) in self.excluded
 
     # ---------------------------------------------------------------- valores simples
-    def add_value(self, category: str, value: str) -> None:
+    def add_value(self, category: str, value: str, label: str | None = None) -> None:
         value = value.strip(" .,;:-|")
         if len(value) < 3 or self.is_excluded(value):
             return
@@ -121,10 +124,13 @@ class Knowledge:
         else:
             pattern = fuzzy_text_pattern(value)
             key = f"{category}:{norm(value)}"
-        if (key, False) in self.literals:
+        existing = self.literals.get((key, False))
+        if existing is not None:
+            if label and not existing.label:
+                existing.label = label
             return
         regex = re.compile(rf"(?<![\w]){pattern}(?![\w])", re.IGNORECASE)
-        self.literals[(key, False)] = Literal(category, key, value, regex)
+        self.literals[(key, False)] = Literal(category, key, value, regex, label=label)
 
     # ---------------------------------------------------------------- nombres
     def add_name(self, category: str, raw: str) -> None:
@@ -305,12 +311,32 @@ def build_knowledge(text: str, opts: Options) -> Knowledge:
         for m in pattern.finditer(text):
             knowledge.add_name("PERSON", m.group("name"))
 
+    if identifiers.resolver_region(opts.region) is not None:
+        for line in text.split("\n"):
+            for hit in identifiers.contextuales(line):
+                category, label = _identifier_category(hit.etiqueta)
+                knowledge.add_value(category, hit.texto, label)
+
     for term in opts.custom_terms:
         if not knowledge.is_excluded(term):
             key = f"CUSTOM:{norm(term)}"
             regex = re.compile(rf"(?<![\w]){fuzzy_text_pattern(term)}(?![\w])", re.IGNORECASE)
             knowledge.literals[(key, False)] = Literal("CUSTOM", key, term, regex)
     return knowledge
+
+
+def _identifier_category(etiqueta: str) -> tuple[str, str | None]:
+    """Etiqueta del módulo de identificadores -> (categoría, marcador específico)."""
+    if etiqueta == "FICHA_CLINICA":
+        return "RECORD", None  # usa el marcador localizado [N_FICHA] / [RECORD_NO]
+    return "ID", etiqueta
+
+
+# Marcadores específicos que se traducen según el idioma de salida.
+LOCALIZED_LABELS = {
+    "PASAPORTE": {"es": "PASAPORTE", "en": "PASSPORT"},
+    "NUMERO": {"es": "NUMERO", "en": "NUMBER"},
+}
 
 
 # --------------------------------------------------------------------------- redacción
@@ -321,6 +347,8 @@ class Span:
     end: int
     category: str
     key: str
+    label: str | None = None
+    rank: int = 2  # desempate ante el mismo texto: menor = más específico
 
     @property
     def length(self) -> int:
@@ -335,19 +363,24 @@ class Redactor:
         self.knowledge = knowledge
         self.opts = opts
         self.lang = lang if lang in PLACEHOLDERS else "es"
+        self.countries = identifiers.resolver_region(opts.region)
         self.numbers: dict[str, int] = {}
         self.per_category: dict[str, int] = {}
         self.report: dict[str, dict] = {}
 
     # ---------------------------------------------------------------- placeholders
-    def placeholder(self, category: str, key: str) -> str:
-        label = PLACEHOLDERS[self.lang].get(category, category)
+    def placeholder(self, category: str, key: str, specific: str | None = None) -> str:
+        if specific:
+            label = LOCALIZED_LABELS.get(specific, {}).get(self.lang, specific)
+        else:
+            label = PLACEHOLDERS[self.lang].get(category, category)
         if self.opts.replacement_style == "tag":
             return f"[{label}]"
-        if key not in self.numbers:
-            self.per_category[category] = self.per_category.get(category, 0) + 1
-            self.numbers[key] = self.per_category[category]
-        return f"[{label}_{self.numbers[key]}]"
+        number_key = (label, key)
+        if number_key not in self.numbers:
+            self.per_category[label] = self.per_category.get(label, 0) + 1
+            self.numbers[number_key] = self.per_category[label]
+        return f"[{label}_{self.numbers[number_key]}]"
 
     # ---------------------------------------------------------------- spans
     def _find_spans(self, text: str) -> list[Span]:
@@ -358,7 +391,8 @@ class Redactor:
             for m in lit.pattern.finditer(text):
                 if lit.name_token and not m.group(0)[:1].isupper():
                     continue
-                spans.append(Span(m.start(), m.end(), lit.category, lit.key))
+                spans.append(Span(m.start(), m.end(), lit.category, lit.key, lit.label,
+                                  1 if lit.label else 2))
 
         def add_pattern(regex, category, digits=False):
             for m in regex.finditer(text):
@@ -381,11 +415,24 @@ class Redactor:
         if self.opts.anonymize_all_dates:
             for regex in rules.DATE_PATTERNS:
                 add_pattern(regex, "DATE")
+
+        # Identificadores por país (validados con dígito verificador cuando existe).
+        hits = identifiers.estructurales(text, self.countries) if self.countries is not None else []
+        if self.opts.aggressive_numbers:
+            hits += identifiers.agresivos(text)
+        for hit in hits:
+            if excluded(hit.texto):
+                continue
+            category, label = _identifier_category(hit.etiqueta)
+            rank = 3 if hit.capa == "agresiva" else 0
+            spans.append(Span(hit.inicio, hit.fin, category, f"{category}:{norm_digits(hit.texto)}",
+                              label, rank))
         return spans
 
     @staticmethod
     def _resolve(spans: list[Span]) -> list[Span]:
-        spans.sort(key=lambda s: (-s.length, CATEGORY_PRIORITY.get(s.category, 99), s.start))
+        spans.sort(key=lambda s: (-s.length, CATEGORY_PRIORITY.get(s.category, 99),
+                                  s.rank, s.start))
         chosen: list[Span] = []
         for span in spans:
             if all(span.end <= c.start or span.start >= c.end for c in chosen):
@@ -412,11 +459,12 @@ class Redactor:
         out, pos = [], 0
         for span in spans:
             original = text[span.start:span.end]
-            replacement = self.placeholder(span.category, span.key)
+            replacement = self.placeholder(span.category, span.key, span.label)
             out.append(text[pos:span.start])
             out.append(replacement)
             pos = span.end
-            entry = self.report.setdefault(span.key, {
+            report_key = replacement if self.opts.replacement_style != "tag" else f"{replacement}|{span.key}"
+            entry = self.report.setdefault(report_key, {
                 "category": span.category, "placeholder": replacement,
                 "values": [], "count": 0,
             })

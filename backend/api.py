@@ -10,7 +10,7 @@ from pathlib import Path
 import webview
 
 from anonymizer import ExtractionError, anonymize_document, load_bytes, load_document, load_text
-from anonymizer import __version__, ocr
+from anonymizer import __version__, identifiers, ocr
 
 log = logging.getLogger(__name__)
 
@@ -40,7 +40,12 @@ class Api:
 
     # ------------------------------------------------------------------ info
     def get_app_info(self) -> dict:
-        return {"version": __version__, "ocr_available": ocr.available()}
+        return {
+            "version": __version__,
+            "ocr_available": ocr.available(),
+            "regions": {k: list(v) for k, v in identifiers.REGIONES.items()},
+            "country_formats": identifiers.formatos_por_pais(),
+        }
 
     # ------------------------------------------------------------------ entrada
     def open_file_dialog(self) -> str | None:

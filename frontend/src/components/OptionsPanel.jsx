@@ -1,8 +1,9 @@
 import { SlidersHorizontal } from 'lucide-react'
 import { useI18n } from '../i18n.jsx'
 import { Button, Card, Segmented, Toggle } from './ui.jsx'
+import RegionSelect from './RegionSelect.jsx'
 
-export default function OptionsPanel({ options, onChange, customDraft, onCustomDraftChange, onApplyCustom }) {
+export default function OptionsPanel({ options, onChange, customDraft, onCustomDraftChange, onApplyCustom, info }) {
   const { t } = useI18n()
   const set = (key) => (value) => onChange({ ...options, [key]: value })
   const customDirty = customDraft.trim() !== (options.custom_terms || []).join('\n').trim()
@@ -24,6 +25,13 @@ export default function OptionsPanel({ options, onChange, customDraft, onCustomD
             <option value="en">{t('langEn')}</option>
           </select>
         </label>
+
+        <RegionSelect
+          value={options.region}
+          onChange={set('region')}
+          regions={info?.regions}
+          countryFormats={info?.country_formats}
+        />
 
         <div className="grid grid-cols-2 gap-3">
           <Segmented
@@ -66,6 +74,13 @@ export default function OptionsPanel({ options, onChange, customDraft, onCustomD
             checked={options.anonymize_addresses}
             onChange={set('anonymize_addresses')}
             label={t('optAddresses')}
+          />
+          <Toggle
+            id="opt-aggressive"
+            checked={options.aggressive_numbers}
+            onChange={set('aggressive_numbers')}
+            label={t('optAggressive')}
+            hint={t('optAggressiveHint')}
           />
           <Toggle
             id="opt-repeated"
