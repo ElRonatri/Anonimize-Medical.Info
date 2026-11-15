@@ -1,0 +1,4 @@
+# OPCIONAL: OCR local para PDFs escaneados (sin texto seleccionable).
+# Aumenta el tamaño del ejecutable (~100 MB). Funciona sin conexión.
+rapidocr>=2.0
+onnxruntime>=1.17
