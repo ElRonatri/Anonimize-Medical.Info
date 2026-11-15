@@ -18,7 +18,7 @@
 
 Mr. [PATIENT_1] is a 70 y/o male admitted for CHF exacerbation. [PATIENT_1] tolerated diuresis.
 BNP 1450 pg/mL, creatinine 1.4 mg/dL, K 4.1 mmol/L. Rose 2 kg weight loss noted.
-Follow up with Aisha Rahman, MD in 1 week. Server log ref 10.0.12.7.
+Follow up with Aisha Rahman, MD in 1 week. Server log ref [IP_1].
 
 - **Electronically signed by:** Aisha Rahman, MD on 10/05/2025 16:05
 
@@ -31,4 +31,5 @@ Follow up with Aisha Rahman, MD in 1 week. Server log ref 10.0.12.7.
 [PHONE_1]	PHONE	1	(614) 555-0182
 [EMAIL_1]	EMAIL	1	tobrien55@example.com
 [ADDRESS_1]	ADDRESS	1	2210 Cedar Lane, Apt 4B, Columbus, OH 43215
-<!-- language=en pages=1 replacements=10 -->
+[IP_1]	IP	1	10.0.12.7
+<!-- language=en pages=1 replacements=11 -->

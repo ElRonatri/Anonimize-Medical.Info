@@ -15,6 +15,11 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 - Pruebas de regresión con *golden files* (`tests/golden/`).
 - `CHANGELOG.md` y configuración centralizada en `pyproject.toml`.
 
+### Corregido
+- Una dirección IP al final de una oración («ref 10.0.12.7.») no se detectaba.
+- Con «Ocultar cualquier número largo» activo, un dato reconocido (p. ej. el N° de ficha) se
+  marcaba como `[NUMERO]` en lugar de con su marcador específico.
+
 ## [1.0.0] - 2026-11-15
 
 ### Añadido

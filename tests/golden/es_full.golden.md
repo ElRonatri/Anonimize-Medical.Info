@@ -8,7 +8,7 @@
 - **Fecha de nacimiento:** [FECHA_NACIMIENTO_1]
 - **Sexo:** Masculino
 
-Ficha clínica N° [NUMERO_1]  Previsión: FONASA C
+Ficha clínica N° [N_FICHA_1]  Previsión: FONASA C
 
 - **Dirección:** [DIRECCION_1]
 - **Teléfono:** [TELEFONO_1]
@@ -20,7 +20,7 @@ Ficha clínica N° [NUMERO_1]  Previsión: FONASA C
 
 Paciente de 67 años, el Sr. [PACIENTE_1] consulta por disnea de 3 días. [PACIENTE_1] refiere tos productiva. Piel rosa, sin lesiones. Antecedente de HTA desde 2010.
 Ingresa el [FECHA_1] a las 14:30. Hemoglobina 11.2 g/dL, leucocitos 13.400/mm3,
-PCR 86 mg/L, plaquetas [NUMERO_2] (revisar), saturación 91%.
+PCR 86 mg/L, plaquetas [NUMERO_1] (revisar), saturación 91%.
 
 ## EVOLUCIÓN
 
@@ -34,9 +34,9 @@ Interconsulta a Dr. [PROFESIONAL_2]. La Dra. [PROFESIONAL_1] indica alta el [FEC
 <!-- golden: entities -->
 [PACIENTE_1]	PATIENT	3	JOSÉ ANTONIO MUÑOZ PEÑA | Muñoz | JOSE MUNOZ
 [FECHA_NACIMIENTO_1]	BIRTHDATE	1	14/02/1958
-[NUMERO_1]	ID	1	0098123
-[NUMERO_2]	ID	1	1.234.567
+[NUMERO_1]	ID	1	1.234.567
 [RUN_CL_1]	ID	1	16.789.012-3
+[N_FICHA_1]	RECORD	1	0098123
 [PERSONA_1]	PERSON	2	ROSA | Rosa Peña Soto
 [TELEFONO_1]	PHONE	1	+56 9 6123 4567
 [EMAIL_1]	EMAIL	1	jmunoz.pena@correo.cl

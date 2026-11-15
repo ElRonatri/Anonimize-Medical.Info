@@ -541,7 +541,9 @@ class Redactor:
 
     @staticmethod
     def _resolve(spans: list[Span]) -> list[Span]:
-        spans.sort(key=lambda s: (-s.length, CATEGORY_PRIORITY.get(s.category, 99),
+        # A igual longitud gana lo más específico. La capa agresiva (rank 3, "[NUMERO]") siempre
+        # pierde frente a un dato reconocido (p. ej. N° de ficha), sea cual sea su categoría.
+        spans.sort(key=lambda s: (-s.length, s.rank >= 3, CATEGORY_PRIORITY.get(s.category, 99),
                                   s.rank, s.start))
         chosen: list[Span] = []
         for span in spans:

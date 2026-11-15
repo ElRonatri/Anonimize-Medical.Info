@@ -267,7 +267,8 @@ DATE_PATTERNS = [
 
 EMAIL_RE = re.compile(r"(?<![\w.+-])[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 URL_RE = re.compile(r"\b(?:https?://|www\.)[^\s<>\]\)\|]+", re.IGNORECASE)
-IP_RE = re.compile(r"(?<![\d.])(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?![\d.])")
+# (?!\d|\.\d): una IP al final de una oración ("ref 10.0.12.7.") también se detecta.
+IP_RE = re.compile(r"(?<![\d.])(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?!\d|\.\d)")
 
 ID_PATTERNS = [
     # RUT / RUN chileno: 12.345.678-9 ó 12345678-K
