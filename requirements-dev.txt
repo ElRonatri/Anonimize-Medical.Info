@@ -1,0 +1,4 @@
+-r requirements.txt
+pytest>=8
+reportlab>=4      # sólo para scripts/make_samples.py y tests
+pyinstaller>=6.0
