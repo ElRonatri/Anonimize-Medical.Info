@@ -25,7 +25,7 @@ epicrisis, informes, etc.), **anonimiza los datos del paciente** y devuelve el r
 | Marcadores | numerados y consistentes (`[PACIENTE_1]`, `[PERSONA_2]`) o genéricos (`[PACIENTE]`) |
 | Revisión | lista de datos detectados (valores originales ocultos por defecto); marca falsos positivos para no anonimizarlos; edición manual del resultado |
 | Limpieza | elimina encabezados/pies de página repetidos y números de página |
-| OCR | PDFs escaneados o basados en imágenes, 100% sin conexión: **Tesseract** (vía `pytesseract`, español + inglés) o **RapidOCR** (ONNX). Modo automático (sólo páginas escaneadas), todas las páginas o desactivado |
+| OCR | PDFs escaneados o basados en imágenes, 100% sin conexión: **Tesseract** (español + inglés, invocado sin archivos temporales) o **RapidOCR** (ONNX). Modo automático (sólo páginas escaneadas), todas las páginas o desactivado |
 | Rendimiento | expresiones regulares precompiladas y combinadas; ~2 ms para una epicrisis de 2 páginas, ~1 s para 1,3 millones de caracteres (≈400 páginas densas) |
 
 ### Cómo detecta los datos
@@ -46,6 +46,81 @@ epicrisis, informes, etc.), **anonimiza los datos del paciente** y devuelve el r
 
 > ⚠️ La detección es automática y basada en reglas: **revisa siempre el resultado antes de
 > compartirlo**. Usa *Términos adicionales a ocultar* para lo que no se haya detectado.
+
+### Identificadores por país
+
+Al elegir un país o región se activan sus formatos **estructurales** (se reconocen sin etiqueta).
+✓ = se valida el dígito verificador; los demás se reconocen sólo por su estructura. En todos los
+casos se activan además los pasaportes (zona MRZ, validada con ICAO 9303) y más de 150 palabras
+clave (`CC 1020304050`, `PESEL 44051401359`, `Pasaporte N° AB1234567`…).
+
+| Región | País | Formatos estructurales |
+|---|---|---|
+| Latinoamérica | Chile | RUN/RUT ✓ |
+| | Argentina | CUIL/CUIT ✓, DNI con puntos |
+| | Brasil | CPF ✓, Cartão Nacional de Saúde (CNS) ✓ |
+| | México | CURP, RFC |
+| | Venezuela | Cédula V-/E-, RIF |
+| | Uruguay | Cédula de Identidad ✓ |
+| | Ecuador | Cédula de Identidad ✓ |
+| | Bolivia, Colombia, Costa Rica, Paraguay, Perú | sólo palabras clave (CI, CC, DNI, DIMEX…) |
+| Norteamérica | EE. UU. | SSN (con rangos inválidos excluidos), Medicare MBI |
+| | Canadá | SIN ✓ (Luhn) |
+| Europa | España | DNI/NIF ✓, NIE ✓ |
+| | Francia | NIR ✓ |
+| | Italia | Codice Fiscale |
+| | Reino Unido | National Insurance Number, NHS Number ✓ |
+| | Suecia, Dinamarca, Noruega | Personnummer / CPR |
+| | Finlandia | Henkilötunnus ✓ |
+| | Suiza, Liechtenstein | AHV/AVS |
+| | Alemania, Irlanda, Países Bajos, Polonia, Portugal | sólo palabras clave (Steuer-ID, PPSN, BSN, PESEL, NIF…) |
+| Asia y Medio Oriente | China | Resident Identity Card ✓ |
+| | India | Aadhaar ✓ (Verhoeff), PAN |
+| | Corea del Sur | Resident Registration Number |
+| | Singapur | NRIC/FIN |
+| | Hong Kong | HKID |
+| | Pakistán | CNIC |
+| | Emiratos Árabes Unidos | Emirates ID ✓ (Luhn) |
+| | Japón | sólo palabras clave (My Number) |
+
+Sin región elegida («General») se usan las etiquetas y los formatos comunes (RUT, SSN, DNI/NIE,
+CURP), sin validación de dígito verificador.
+
+## Privacidad
+
+Garantías del diseño, verificadas por pruebas automáticas (`tests/test_privacy.py`):
+
+- **Todo es local.** No hay llamadas de red ni servicios externos. La interfaz se sirve desde un
+  servidor interno de PyWebView en `127.0.0.1` que sólo entrega los archivos de la propia interfaz.
+- **Sin archivos temporales.** Los PDF se leen en memoria. El OCR con Tesseract recibe la imagen
+  por la entrada estándar y devuelve el texto por la salida estándar; RapidOCR trabaja en memoria.
+  Lo único que se escribe en disco son las exportaciones que el usuario guarda.
+- **Logs sin contenido clínico.** Nunca se registran textos, valores detectados ni nombres de
+  archivo (suelen contener el nombre del paciente). De los errores sólo se guarda el tipo y la
+  línea de código, no el mensaje. Las librerías que leen el PDF quedan en nivel WARNING incluso en
+  modo desarrollo. El ejecutable no tiene consola ni archivo de log.
+- **Memoria.** Los documentos cargados permanecen en RAM mientras la aplicación está abierta (para
+  re-anonimizar al cambiar opciones) y se liberan al quitarlos de la lista o cerrar la aplicación.
+- **Preferencias.** Idioma, tema, opciones y la lista de excepciones se guardan en el perfil de
+  WebView2 del usuario. Los *términos adicionales a ocultar* **no** se guardan: duran la sesión.
+- **Herramientas de desarrollo.** DevTools y el menú «Inspeccionar» sólo existen al ejecutar desde el
+  código con `run-dev.bat`; en el `.exe`, `--dev` se ignora.
+- **Exportaciones.** El JSON no incluye los valores originales detectados. Al exportar varios
+  documentos se puede usar nombres genéricos (`documento_01…`) para no revelar el nombre del paciente.
+
+### Limitaciones
+
+- **Es una herramienta de apoyo, no una garantía de anonimización legal** (p. ej. HIPAA *Safe
+  Harbor* o RGPD). Por diseño se conservan datos clínicos útiles (edad, sexo, fechas de atención,
+  diagnósticos) que, combinados, pueden permitir reidentificar a una persona en casos raros.
+- La detección se basa en reglas: no reconoce nombres sin etiqueta ni tratamiento («Juan consultó…»
+  sólo se oculta si «Juan» apareció antes como nombre del paciente), apodos ni nombres en minúscula.
+- La propagación de nombres puede ocultar instituciones que comparten una palabra con un nombre
+  («Clínica Santa **Rosa**» si un familiar se llama Rosa). Para eso está la lista de excepciones.
+- El OCR puede leer mal números y nombres; revisa con más cuidado las páginas escaneadas.
+- Texto dentro de imágenes de un PDF con texto seleccionable (logos, firmas escaneadas) sólo se
+  procesa con el OCR en modo «Todas las páginas».
+- El texto copiado queda en el portapapeles de Windows (y en su historial, si está activado).
 
 ## Requisitos (para compilar)
 
@@ -92,13 +167,22 @@ run-dev.bat
 
 Levanta Vite en `http://localhost:5173` y abre la ventana de PyWebView apuntando a él, con DevTools.
 
-## Pruebas
+## Pruebas y calidad
 
 ```bat
 pip install -r requirements-dev.txt
-pytest
+ruff check backend tests scripts          :: lint
+mypy                                      :: tipos (configuración en pyproject.toml)
+pytest --cov                              :: pruebas + cobertura (mínimo 70 %)
 python scripts\make_samples.py samples   :: genera PDFs de ejemplo con datos ficticios
 ```
+
+- **Golden files** (`tests/golden/`): la salida esperada de documentos ficticios. Si un cambio de
+  comportamiento es intencional, regenera con `UPDATE_GOLDEN=1 pytest tests/test_golden.py` y revisa el diff.
+- **Autoprueba del ejecutable:** `AnonimizeMedical.exe --self-test --self-test-report informe.json`
+  verifica el motor, las exportaciones y la interfaz empaquetada sin abrir la ventana.
+- **CI** (`.github/workflows/ci.yml`): lint, tipos, pruebas en Python 3.10/3.12/3.13, build del
+  frontend y build de Windows con autoprueba en cada push y pull request.
 
 ## Estructura
 
@@ -116,8 +200,10 @@ backend/
     render.py           salida Markdown / texto, limpieza de encabezados
     pipeline.py         orquestación
     lang.py             marcadores por idioma y detección de idioma
+    privacy.py          logging sin contenido clínico
 frontend/               React + Tailwind (Vite)
-tests/                  pruebas (pytest)
+tests/                  pruebas (pytest); fixtures/ y golden/ para regresión
+.github/workflows/      CI
 scripts/make_samples.py PDFs de ejemplo ficticios
 anonimize.spec          configuración de PyInstaller
 build.bat / run.bat / run-dev.bat

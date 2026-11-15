@@ -10,6 +10,7 @@ from pathlib import Path
 
 from . import ocr
 from .document import Block, Document, Page
+from .privacy import log_exception
 
 log = logging.getLogger(__name__)
 
@@ -89,7 +90,7 @@ def _load_pdf(name: str, data: bytes, ocr_mode: str, ocr_engine: str,
             try:
                 page.blocks = _extract_page_blocks(pdf_page)
             except Exception as exc:  # una página dañada no debe tumbar el documento
-                log.exception("Error extrayendo página %s", index)
+                log_exception(log, "Error extrayendo la página %s", exc, index)
                 doc.warnings.append(f"page_error:{index}:{exc}")
                 page.blocks = []
 
@@ -102,7 +103,7 @@ def _load_pdf(name: str, data: bytes, ocr_mode: str, ocr_engine: str,
                         page.blocks = [Block("line", text=t) for t in lines]
                         page.ocr = True
                 except Exception as exc:
-                    log.exception("Error de OCR en página %s", index)
+                    log_exception(log, "Error de OCR en la página %s", exc, index)
                     doc.warnings.append(f"ocr_error:{index}:{exc}")
             doc.pages.append(page)
 
@@ -136,7 +137,7 @@ def _extract_page_blocks(pdf_page) -> list[Block]:
     try:
         tables = [t for t in pdf_page.find_tables() if _table_is_meaningful(t)]
     except Exception:
-        log.debug("Fallo detectando tablas", exc_info=True)
+        log.debug("Fallo detectando tablas en una página")
 
     bboxes = [t.bbox for t in tables]
 

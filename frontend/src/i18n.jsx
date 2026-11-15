@@ -55,7 +55,7 @@ const messages = {
     optAggressive: 'Ocultar cualquier número largo',
     optAggressiveHint: 'Secuencias de 7 o más dígitos (respeta las fechas). Puede ocultar valores clínicos.',
     customTerms: 'Términos adicionales a ocultar',
-    customTermsHint: 'Uno por línea: nombres, instituciones u otros datos que no se detectaron.',
+    customTermsHint: 'Uno por línea: nombres, instituciones u otros datos que no se detectaron. No se guardan al cerrar.',
     customTermsPlaceholder: 'Ej.: Clínica Los Andes',
     apply: 'Aplicar',
 
@@ -210,7 +210,7 @@ const messages = {
     optAggressive: 'Hide any long number',
     optAggressiveHint: 'Sequences of 7+ digits (dates are kept). May hide clinical values.',
     customTerms: 'Additional terms to hide',
-    customTermsHint: 'One per line: names, institutions or other data that was not detected.',
+    customTermsHint: 'One per line: names, institutions or other data that was not detected. Not saved on exit.',
     customTermsPlaceholder: 'e.g. Mercy General Hospital',
     apply: 'Apply',
 

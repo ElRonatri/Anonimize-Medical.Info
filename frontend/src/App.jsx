@@ -29,6 +29,12 @@ const DEFAULT_OPTIONS = {
 
 const POLL_MS = 250
 
+// Privacidad: las preferencias se guardan en el perfil de WebView2, pero NUNCA los términos a
+// ocultar (suelen ser nombres de pacientes): sólo viven durante la sesión.
+function persistable({ custom_terms: _sessionOnly, ...rest }) {
+  return rest
+}
+
 function initialTheme() {
   const saved = loadPref('theme')
   if (saved === 'dark' || saved === 'light') return saved
@@ -43,7 +49,7 @@ export default function App() {
   const [info, setInfo] = useState(null)
   const [backendMissing, setBackendMissing] = useState(false)
 
-  const [options, setOptions] = useState(() => ({ ...DEFAULT_OPTIONS, ...loadPref('options', {}) }))
+  const [options, setOptions] = useState(() => ({ ...DEFAULT_OPTIONS, ...persistable(loadPref('options', {})) }))
   const [excluded, setExcluded] = useState([])
 
   const [mode, setMode] = useState('file')
@@ -86,7 +92,7 @@ export default function App() {
     }
   }, [])
 
-  useEffect(() => savePref('options', options), [options])
+  useEffect(() => savePref('options', persistable(options)), [options])
 
   const requestOptions = useMemo(
     () => ({ ...options, exclude: excluded.flatMap((e) => e.values) }),

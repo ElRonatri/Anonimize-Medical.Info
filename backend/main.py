@@ -46,6 +46,15 @@ class Config:
     self_test_report: Path | None
 
 
+def dev_mode_allowed(requested: bool, frozen: bool) -> bool:
+    """DevTools sólo desde el código fuente (run-dev.bat), nunca en el ejecutable distribuido.
+
+    En el .exe, `--dev` se ignora: abriría las herramientas de desarrollo (inspección del DOM,
+    consola con acceso al texto del documento) y apuntaría a un servidor local de Vite.
+    """
+    return requested and not frozen
+
+
 def parse_args(argv: list[str] | None = None) -> Config:
     parser = argparse.ArgumentParser(description=APP_TITLE)
     parser.add_argument("--dev", action="store_true", help="servidor de desarrollo de Vite + DevTools")
@@ -53,7 +62,8 @@ def parse_args(argv: list[str] | None = None) -> Config:
     parser.add_argument("--self-test", action="store_true", help="verificar la instalación sin abrir la ventana")
     parser.add_argument("--self-test-report", type=Path, help="archivo JSON donde escribir el resultado")
     args = parser.parse_args(argv)
-    return Config(dev=args.dev, url=args.url, self_test=args.self_test, self_test_report=args.self_test_report)
+    return Config(dev=dev_mode_allowed(args.dev, is_frozen()), url=args.url, self_test=args.self_test,
+                  self_test_report=args.self_test_report)
 
 
 # --------------------------------------------------------------------------- autoprueba
@@ -115,14 +125,19 @@ def run_window(config: Config) -> None:
     api._set_window(window)
 
     # En Windows pywebview usa Edge WebView2 (incluido en Windows 10/11).
-    # private_mode=False permite que la interfaz recuerde preferencias (idioma, opciones).
+    # debug=True (DevTools, menú "Inspeccionar") sólo en desarrollo; ver dev_mode_allowed().
+    # private_mode=False permite que la interfaz recuerde preferencias (idioma, tema, opciones);
+    # nunca se guarda contenido clínico ni los términos personalizados (ver frontend/src/App.jsx).
     webview.start(debug=dev, http_server=not dev, private_mode=False)
 
 
 def main(argv: list[str] | None = None) -> int:
+    from anonymizer.privacy import configure_logging
+
     config = parse_args(argv)
-    logging.basicConfig(level=logging.DEBUG if config.dev else logging.INFO,
-                        format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    configure_logging(dev=config.dev)
+    if "--dev" in (argv if argv is not None else sys.argv[1:]) and not config.dev:
+        logging.getLogger(__name__).warning("--dev se ignora en el ejecutable distribuido")
 
     if config.self_test:
         try:

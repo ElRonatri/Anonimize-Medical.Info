@@ -15,6 +15,16 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 - Pruebas de regresión con *golden files* (`tests/golden/`).
 - `CHANGELOG.md` y configuración centralizada en `pyproject.toml`.
 
+### Cambiado
+- **Privacidad:** el OCR con Tesseract envía la imagen por stdin y lee el texto por stdout, sin
+  archivos temporales (antes `pytesseract` escribía la página en `%TEMP%`). Se elimina la
+  dependencia `pytesseract`.
+- **Privacidad:** los logs ya no incluyen nombres de archivo ni mensajes de excepción (sólo el
+  tipo y la pila); las librerías que leen el PDF quedan en WARNING incluso en modo desarrollo.
+- **Privacidad:** los «términos adicionales a ocultar» ya no se guardan entre sesiones.
+- `--dev` (DevTools) se ignora en el ejecutable distribuido.
+- README: secciones de privacidad, limitaciones y matriz de identificadores por país.
+
 ### Corregido
 - Una dirección IP al final de una oración («ref 10.0.12.7.») no se detectaba.
 - Con «Ocultar cualquier número largo» activo, un dato reconocido (p. ej. el N° de ficha) se

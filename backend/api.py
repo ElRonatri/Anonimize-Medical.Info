@@ -19,6 +19,7 @@ from pathlib import Path
 from anonymizer import ExtractionError, __version__, anonymize_document, identifiers, load_bytes, load_text, ocr
 from anonymizer.document import Document
 from anonymizer.exporters import FORMATS, export_bytes
+from anonymizer.privacy import log_exception
 
 log = logging.getLogger(__name__)
 
@@ -253,7 +254,7 @@ class Api:
             with self._lock:
                 item.status, item.error, item.detail = "error", str(exc).split(":", 1)[0], str(exc)
         except Exception as exc:  # pragma: no cover - errores inesperados
-            log.exception("Error procesando %s", item.name)
+            log_exception(log, "Error procesando el elemento %s", exc, item.id)
             with self._lock:
                 item.status, item.error, item.detail = "error", "process_error", str(exc)
 
@@ -288,7 +289,7 @@ class Api:
             try:
                 result = self._anonymize(item.doc, options or {}, item)
             except Exception as exc:  # pragma: no cover
-                log.exception("Error re-anonimizando %s", item.name)
+                log_exception(log, "Error re-anonimizando el elemento %s", exc, item.id)
                 results[item.id] = _error("process_error", str(exc))
                 continue
             with self._lock:
