@@ -18,6 +18,8 @@ const DEFAULT_OPTIONS = {
   anonymize_addresses: true,
   remove_repeated: true,
   page_markers: true,
+  region: 'general',
+  aggressive_numbers: false,
   custom_terms: [],
 }
 
@@ -218,6 +220,7 @@ export default function App() {
             customDraft={customDraft}
             onCustomDraftChange={setCustomDraft}
             onApplyCustom={applyCustom}
+            info={info}
           />
         </aside>
 
