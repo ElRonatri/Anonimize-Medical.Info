@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ScanText, ShieldOff, SlidersHorizontal } from 'lucide-react'
+import { Cpu, ScanText, ShieldOff, SlidersHorizontal } from 'lucide-react'
 import { useI18n } from '../i18n.jsx'
 import { Button, Card, Segmented, Toggle, cx } from './ui.jsx'
 import RegionSelect from './RegionSelect.jsx'
@@ -202,6 +202,26 @@ export default function OptionsPanel({ options, onChange, info }) {
         >
           {engines.length ? `${t('ocrStatusOk', engineNames)} ${t('ocrReloadHint')}` : t('ocrStatusNone')}
         </p>
+
+        <SectionTitle icon={Cpu}>{t('sectionPerformance')}</SectionTitle>
+        <label className="block">
+          <span className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400">{t('maxWorkers')}</span>
+          <select
+            value={String(options.max_workers ?? 'auto')}
+            onChange={(e) => set('max_workers')(e.target.value === 'auto' ? 'auto' : Number(e.target.value))}
+            className={selectClass}
+          >
+            <option value="auto">{t('maxWorkersAuto', info?.default_workers ?? 1)}</option>
+            {Array.from({ length: info?.cpu_count ?? 1 }, (_, i) => i + 1).map((n) => (
+              <option key={n} value={String(n)}>
+                {n}
+              </option>
+            ))}
+          </select>
+          <span className="mt-1 block text-[11px] leading-snug text-slate-400 dark:text-slate-500">
+            {t('maxWorkersHint', info?.cpu_count ?? 1)}
+          </span>
+        </label>
 
         <SectionTitle icon={ShieldOff}>{t('sectionTerms')}</SectionTitle>
         <TermList

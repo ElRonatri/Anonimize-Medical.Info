@@ -9,14 +9,18 @@ from __future__ import annotations
 
 import base64
 import logging
+import os
 import queue
 import re
 import threading
+import time
 import uuid
+from concurrent.futures import FIRST_COMPLETED, Future, wait
+from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from anonymizer import ExtractionError, __version__, anonymize_document, identifiers, load_bytes, load_text, ocr
+from anonymizer import ExtractionError, __version__, anonymize_document, identifiers, load_text, ocr, parallel
 from anonymizer.document import Document
 from anonymizer.exporters import FORMATS, export_bytes
 from anonymizer.privacy import log_exception
@@ -24,6 +28,10 @@ from anonymizer.privacy import log_exception
 log = logging.getLogger(__name__)
 
 MAX_FILE_BYTES = 80 * 1024 * 1024  # 80 MB por archivo
+# Arrancar procesos cuesta ~0,2-0,4 s; con PDFs de texto livianos (KB) el lote entero tarda menos.
+# Se usa paralelo con OCR forzado, con lotes grandes (los escaneos pesan cientos de KB por página)
+# o si los procesos ya están activos. Medición en docs/benchmarks.md.
+PARALLEL_MIN_BYTES = 1024 * 1024
 
 
 def _dialog_type(name: str):
@@ -34,6 +42,25 @@ def _dialog_type(name: str):
     if file_dialog is not None:
         return getattr(file_dialog, name)
     return getattr(webview, f"{name}_DIALOG")
+
+
+def _file_size(path: str | None) -> int:
+    try:
+        return max(1, os.path.getsize(path)) if path else 1
+    except OSError:
+        return 1
+
+
+def _eta(job: Job, items: list) -> float | None:
+    """Segundos restantes estimados, ponderando cada archivo por su tamaño."""
+    if job.started is None or not items:
+        return None
+    elapsed = time.monotonic() - job.started
+    total = sum(i.size for i in items)
+    done = sum(i.size * i.fraction() for i in items)
+    if elapsed < 1.0 or done <= 0 or total <= 0:
+        return None
+    return round(elapsed * (total - done) / done, 1)
 
 
 def _error(code: str, detail: str = "") -> dict:
@@ -63,10 +90,20 @@ class Item:
     error: str = ""
     detail: str = ""
     result: dict | None = None
+    size: int = 1  # bytes (peso para el tiempo estimado)
+    worker: int | None = None  # pid del proceso que lo extrajo
 
     def public(self) -> dict:
         return {"id": self.id, "name": self.name, "status": self.status, "stage": self.stage,
-                "page": self.page, "pages": self.pages, "error": self.error, "detail": self.detail}
+                "page": self.page, "pages": self.pages, "error": self.error, "detail": self.detail,
+                "worker": self.worker}
+
+    def fraction(self) -> float:
+        if self.status in ("done", "error", "cancelled"):
+            return 1.0
+        if self.status == "processing" and self.pages:
+            return 0.95 * min(self.page, self.pages) / self.pages
+        return 0.0
 
 
 @dataclass
@@ -74,9 +111,13 @@ class Job:
     id: str
     item_ids: list[str]
     options: dict
+    num: int = 0  # número para la cancelación compartida con los procesos
+    workers: int = 1
+    mode: str = "sequential"  # sequential | parallel
     cancelled: bool = False
     done: bool = False
     current: str | None = None
+    started: float | None = None
     finished: set[str] = field(default_factory=set)
 
 
@@ -88,6 +129,8 @@ class Api:
         self._jobs: dict[str, Job] = {}
         self._queue: queue.Queue[str] = queue.Queue()
         self._worker: threading.Thread | None = None
+        self._pool: parallel.ExtractionPool | None = None
+        self._job_counter = 0
 
     def _set_window(self, window) -> None:
         self._window = window
@@ -101,6 +144,8 @@ class Api:
             "regions": {k: list(v) for k, v in identifiers.REGIONES.items()},
             "country_formats": identifiers.formatos_por_pais(),
             "export_formats": list(FORMATS),
+            "cpu_count": parallel.cpu_count(),
+            "default_workers": parallel.default_workers(),
         }
 
     # ------------------------------------------------------------------ selección de archivos
@@ -138,6 +183,7 @@ class Api:
                 item.status, item.error, item.data = "error", "file_too_large", None
             if item.path is None and item.data is None and item.status != "error":
                 item.status, item.error = "error", "file_not_found"
+            item.size = len(item.data) if item.data is not None else _file_size(item.path)
             items.append(item)
             if item.status == "error":
                 rejected.append(item.id)
@@ -159,7 +205,12 @@ class Api:
         return {"ok": True, "job_id": job.id, "items": [self._items[i].public() for i in ids]}
 
     def _enqueue(self, ids: list[str], options: dict | None) -> Job:
-        job = Job(id=uuid.uuid4().hex[:12], item_ids=ids, options=dict(options or {}))
+        opts = dict(options or {})
+        with self._lock:
+            self._job_counter += 1
+            num = self._job_counter
+        job = Job(id=uuid.uuid4().hex[:12], item_ids=ids, options=opts, num=num,
+                  workers=parallel.resolve_workers(opts.get("max_workers")))
         with self._lock:
             self._jobs[job.id] = job
             if not ids:
@@ -181,13 +232,18 @@ class Api:
             items = [self._items[i] for i in job.item_ids if i in self._items]
             results = {i.id: i.result for i in items
                        if i.status == "done" and i.result and i.id not in known_set}
+            active = [i.id for i in items if i.status == "processing"]
             return {
                 "ok": True,
                 "done": job.done,
                 "cancelled": job.cancelled,
-                "current": job.current,
+                "current": job.current or (active[0] if active else None),
+                "active": active,
+                "workers": job.workers,
+                "mode": job.mode,
                 "total": len(items),
                 "completed": sum(1 for i in items if i.status in ("done", "error", "cancelled")),
+                "eta_seconds": None if job.done else _eta(job, items),
                 "items": [i.public() for i in items],
                 "results": results,
             }
@@ -198,7 +254,17 @@ class Api:
             if job is None:
                 return _error("no_job")
             job.cancelled = True
+            pool = self._pool
+        if pool is not None:
+            pool.cancel_job(job.num)  # los procesos lo ven en la siguiente página
         return {"ok": True}
+
+    def shutdown(self) -> None:
+        """Detiene los procesos de extracción (al cerrar la aplicación)."""
+        with self._lock:
+            pool, self._pool = self._pool, None
+        if pool is not None:
+            pool.shutdown()
 
     def remove_items(self, item_ids: list[str]) -> dict:
         with self._lock:
@@ -213,50 +279,190 @@ class Api:
                 job = self._jobs.get(job_id)
             if job is None:
                 continue
-            for item_id in job.item_ids:
+            job.started = time.monotonic()
+            pending = [i for i in job.item_ids if i in self._items]
+            try:
+                if self._use_parallel(job, pending):
+                    job.mode = "parallel"
+                    self._run_parallel(job, pending)
+                else:
+                    self._run_sequential(job, pending)
+            except Exception as exc:  # pragma: no cover - p. ej. no se pudo crear el pool
+                log_exception(log, "Error en el lote %s", exc, job.id)
                 with self._lock:
-                    item = self._items.get(item_id)
-                    if item is None:
-                        continue
-                    if job.cancelled:
-                        item.status = "cancelled"
-                        continue
-                    job.current = item_id
-                    item.status, item.stage, item.page = "processing", "text", 0
-                self._process_item(item, job)
+                    for item_id in pending:
+                        item = self._items.get(item_id)
+                        if item is not None and item.status in ("queued", "processing"):
+                            item.status, item.error = "error", "process_error"
             with self._lock:
                 job.current = None
                 job.done = True
 
-    def _process_item(self, item: Item, job: Job) -> None:
+    # ---------------------------------------------------------------- modo secuencial (1 proceso)
+    def _run_sequential(self, job: Job, ids: list[str]) -> None:
         opts = job.options
-
-        def progress(page: int, total: int, stage: str) -> None:
+        for item_id in ids:
             with self._lock:
-                item.page, item.pages, item.stage = page, total, stage
+                maybe = self._items.get(item_id)
+                if maybe is None:
+                    continue
+                item = maybe
+                if job.cancelled:
+                    item.status = "cancelled"
+                    continue
+                job.current = item_id
+                item.status, item.stage, item.page, item.worker = "processing", "text", 0, os.getpid()
 
+            def progress(page: int, total: int, stage: str, item: Item = item) -> None:
+                if job.cancelled:
+                    raise parallel.Cancelled  # se abandona el documento en la página actual
+                with self._lock:
+                    item.page, item.pages, item.stage = page, total, stage
+
+            try:
+                if item.data is None and item.path:
+                    item.data = parallel.read_source(item.path, None)
+                doc = parallel.extract_in_thread(item.name, item.path, item.data, opts.get("ocr_mode", "auto"),
+                                                 opts.get("ocr_engine", "auto"), progress)
+            except parallel.Cancelled:
+                with self._lock:
+                    item.status = "cancelled"
+                continue
+            except ExtractionError as exc:
+                self._fail(item, str(exc))
+                continue
+            except Exception as exc:  # pragma: no cover - errores inesperados
+                log_exception(log, "Error procesando el elemento %s", exc, item.id)
+                self._fail(item, "process_error")
+                continue
+            self._finish(item, doc, opts)
+
+    # ---------------------------------------------------------------- modo paralelo (procesos)
+    def _ensure_pool(self, workers: int) -> parallel.ExtractionPool:
+        with self._lock:
+            pool = self._pool
+        if pool is not None and pool.workers != workers:
+            pool.shutdown()  # entre lotes el pool está libre: se ajusta al nuevo tamaño
+            pool = None
+        if pool is None:
+            pool = parallel.ExtractionPool(workers, self._on_worker_progress)
+            with self._lock:
+                self._pool = pool
+        return pool
+
+    def _on_worker_progress(self, item_id: str, page: int, total: int, stage: str) -> None:
+        with self._lock:
+            item = self._items.get(item_id)
+            if item is None or item.status not in ("queued", "processing"):
+                return
+            item.status = "processing"  # un proceso lo tomó (respeta el orden de la cola)
+            item.page, item.stage = page, stage
+            if total:
+                item.pages = total
+
+    def _use_parallel(self, job: Job, ids: list[str]) -> bool:
+        if job.workers <= 1 or len(ids) <= 1:
+            return False
+        with self._lock:
+            warm = self._pool is not None and self._pool.workers == job.workers
+            total = sum(self._items[i].size for i in ids if i in self._items)
+        forced = job.options.get("parallel") == "force"  # diagnóstico (autoprueba del .exe)
+        return forced or warm or job.options.get("ocr_mode") == "force" or total >= PARALLEL_MIN_BYTES
+
+    def _discard_pool(self) -> None:
+        with self._lock:
+            pool, self._pool = self._pool, None
+        if pool is not None:
+            try:
+                pool.shutdown()
+            except Exception as exc:  # pragma: no cover - pool ya roto
+                log_exception(log, "Error cerrando un pool roto", exc)
+
+    def _run_parallel(self, job: Job, ids: list[str]) -> None:
+        opts = job.options
+        futures: dict[Future, Item] = {}
         try:
-            if item.data is None and item.path:
-                path = Path(item.path)
-                if not path.is_file():
-                    raise ExtractionError("file_not_found")
-                if path.stat().st_size > MAX_FILE_BYTES:
-                    raise ExtractionError("file_too_large")
-                item.data = path.read_bytes()
-            doc = load_bytes(item.name, item.data or b"", ocr_mode=opts.get("ocr_mode", "auto"),
-                             ocr_engine=opts.get("ocr_engine", "auto"), progress=progress)
+            pool = self._ensure_pool(job.workers)
+            for item_id in ids:  # se envían en el orden de la cola
+                with self._lock:
+                    maybe = self._items.get(item_id)
+                    if maybe is None:
+                        continue
+                    item = maybe
+                    item.status, item.stage, item.page = "queued", "", 0
+                future = pool.submit(item.id, job.num, item.name, item.path if item.data is None else None,
+                                     item.data, opts.get("ocr_mode", "auto"), opts.get("ocr_engine", "auto"))
+                futures[future] = item
+        except (BrokenProcessPool, OSError) as exc:
+            # Los procesos no pudieron arrancar: el lote se procesa en modo secuencial.
+            log_exception(log, "Pool de procesos no disponible; se usa modo secuencial", exc)
+            self._discard_pool()
+            for future in futures:
+                future.cancel()
+            self._run_sequential(job, ids)
+            return
+
+        cancel_sent = False
+        retry: list[str] = []
+        remaining = set(futures)
+        while remaining:
+            done, remaining = wait(remaining, timeout=0.2, return_when=FIRST_COMPLETED)
+            if job.cancelled and not cancel_sent:
+                cancel_sent = True
+                pool.cancel_job(job.num)
+                for future in remaining:
+                    future.cancel()  # los que aún no empezaron no llegan a ejecutarse
+            for future in done:
+                if not self._collect(futures[future], future, opts):
+                    retry.append(futures[future].id)
+        if retry:
+            # Un proceso murió (p. ej. memoria insuficiente): el pool queda inservible. Se descarta
+            # (el próximo lote crea uno nuevo) y los archivos afectados se reprocesan aquí mismo.
+            self._discard_pool()
+            self._run_sequential(job, retry)
+
+    def _collect(self, item: Item, future: Future, opts: dict) -> bool:
+        """Registra el resultado de un proceso. False si el pool se rompió (hay que reintentar)."""
+        if future.cancelled():
             with self._lock:
-                item.stage = "anonymize"
+                item.status = "cancelled"
+            return True
+        try:
+            state, payload, pid = future.result()
+        except BrokenProcessPool as exc:
+            log_exception(log, "Un proceso de extracción terminó inesperadamente (%s)", exc, item.id)
+            return False
+        except Exception as exc:  # pragma: no cover - error inesperado del proceso
+            log_exception(log, "Error en un proceso de extracción (%s)", exc, item.id)
+            self._fail(item, "process_error")
+            return True
+        with self._lock:
+            item.worker = pid
+        if state == "ok":
+            self._finish(item, payload, opts)
+        elif state == "cancelled":
+            with self._lock:
+                item.status = "cancelled"
+        else:
+            self._fail(item, payload)
+        return True
+
+    # ---------------------------------------------------------------- resultados
+    def _finish(self, item: Item, doc: Document, opts: dict) -> None:
+        with self._lock:
+            item.stage = "anonymize"
+        try:
             result = self._anonymize(doc, opts, item)
-            with self._lock:
-                item.doc, item.result, item.status, item.pages = doc, result, "done", result["pages"]
-        except ExtractionError as exc:
-            with self._lock:
-                item.status, item.error, item.detail = "error", str(exc).split(":", 1)[0], str(exc)
         except Exception as exc:  # pragma: no cover - errores inesperados
             log_exception(log, "Error procesando el elemento %s", exc, item.id)
-            with self._lock:
-                item.status, item.error, item.detail = "error", "process_error", str(exc)
+            self._fail(item, "process_error")
+            return
+        with self._lock:
+            item.doc, item.result, item.status, item.pages = doc, result, "done", result["pages"]
+
+    def _fail(self, item: Item, code: str) -> None:
+        with self._lock:
+            item.status, item.error, item.detail = "error", code.split(":", 1)[0], code
 
     @staticmethod
     def _anonymize(doc, options: dict, item: Item) -> dict:

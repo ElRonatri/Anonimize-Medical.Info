@@ -15,7 +15,7 @@ epicrisis, informes, etc.), **anonimiza los datos del paciente** y devuelve el r
 
 | | |
 |---|---|
-| Entrada | **varios PDF a la vez** (arrastrar y soltar o diálogo nativo), TXT, o texto pegado. Se procesan en cola en un hilo secundario, con avance por archivo y por página |
+| Entrada | **varios PDF a la vez** (arrastrar y soltar o diálogo nativo), TXT, o texto pegado. Se procesan en cola y **en paralelo** (procesos configurables), con avance por archivo y página, tiempo restante estimado y cancelación inmediata |
 | Salida | Markdown (títulos, listas, tablas de laboratorio) o texto plano; copiar o **exportar a `.md`, `.txt`, Word `.docx` o `.json`**, un documento o todos a una carpeta (con nombres genéricos opcionales) |
 | Datos detectados | nombre del paciente, familiares y contactos, RUT/RUN, DNI, NIE, CURP, cédula, SSN, pasaporte, N° de ficha / historia clínica / MRN, fecha de nacimiento, teléfonos, correos, direcciones y localidades, URLs, IPs |
 | Opcional | nombres de profesionales (médicos, firmantes), todas las fechas, términos personalizados a ocultar |
@@ -226,11 +226,13 @@ backend/
     lang.py             marcadores por idioma y detección de idioma
     privacy.py          logging sin contenido clínico
     fastmatch.py        búsqueda de muchos valores en una pasada (Aho-Corasick)
+    parallel.py         extracción en procesos paralelos (progreso, cancelación)
 frontend/               React + Tailwind (Vite)
 tests/                  pruebas (pytest); fixtures/ y golden/ para regresión
 .github/workflows/      CI
 scripts/make_samples.py PDFs de ejemplo ficticios
 scripts/bench.py        benchmark del motor (docs/benchmarks.md)
+scripts/bench_batch.py  benchmark de lotes en paralelo
 anonimize.spec          configuración de PyInstaller
 build.bat / run.bat / run-dev.bat
 ```

@@ -73,7 +73,8 @@ def test_logs_never_contain_document_data(caplog, monkeypatch):
     job = api.start_batch([data, data, {"name": SECRET_FILE, "data": "@@no-es-base64@@"}], {})
     assert job["items"][2]["status"] == "error"  # rechazado al encolar (base64 inválido)
     state = wait(api, job["job_id"])
-    assert [i["status"] for i in state["items"]] == ["done", "error"]
+    # En paralelo el orden de finalización varía: uno termina bien y el otro falla.
+    assert sorted(i["status"] for i in state["items"]) == ["done", "error"]
     api.reprocess({"anonymize_professionals": True})
 
     logged = all_log_text(caplog)

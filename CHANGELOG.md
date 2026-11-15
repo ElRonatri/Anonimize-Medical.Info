@@ -15,6 +15,18 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 - Pruebas de regresión con *golden files* (`tests/golden/`).
 - `CHANGELOG.md` y configuración centralizada en `pyproject.toml`.
 
+### Añadido (lotes en paralelo)
+- Extracción de PDF y OCR en paralelo con procesos (`ProcessPoolExecutor`, contexto *spawn*):
+  hasta ×2,8 más rápido con 3 procesos en lotes escaneados. Límite configurable en la interfaz
+  («Procesos en paralelo», por defecto `min(4, núcleos − 1)`); los archivos empiezan en el orden
+  de la cola.
+- Cancelación inmediata: un documento en curso se abandona en la página siguiente (también en
+  modo secuencial). Tiempo restante estimado (ponderado por tamaño) y archivos en curso en la UI.
+- Recuperación: si un proceso muere, sus archivos se reprocesan y el pool se recrea; si los
+  procesos no pueden arrancar, el lote sigue en modo secuencial.
+- Los procesos hijos aplican el bloqueo de red y el logging seguro; la autoprueba del `.exe`
+  verifica el paralelismo (`freeze_support`).
+
 ### Cambiado
 - **Sin descargas después del build:** el proceso bloquea toda conexión no local (audit hook de
   Python, proxies anulados) y a RapidOCR se le pasan siempre las rutas de los modelos empaquetados

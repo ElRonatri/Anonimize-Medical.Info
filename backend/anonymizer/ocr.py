@@ -37,6 +37,15 @@ ENGINES = (TESSERACT, RAPIDOCR)
 
 _lock = threading.Lock()
 _rapid_engine = None
+# Hilos por motor OCR. None = los que el motor decida (todos los núcleos). En los procesos de
+# extracción en paralelo se reparte: núcleos / procesos (si no, se pelean por la CPU).
+_thread_limit: int | None = None
+
+
+def set_thread_limit(threads: int | None) -> None:
+    global _thread_limit, _rapid_engine
+    _thread_limit = threads
+    _rapid_engine = None  # se recrea con el nuevo límite
 _cache: dict[str, Any] = {}
 
 _WINDOWS_PATHS = (
@@ -71,6 +80,8 @@ def find_tesseract() -> str | None:
 
 def _tesseract_env(cmd: str) -> dict[str, str]:
     env = dict(os.environ)
+    if _thread_limit is not None:
+        env["OMP_THREAD_LIMIT"] = str(_thread_limit)  # OpenMP de Tesseract
     tessdata = Path(cmd).parent / "tessdata"
     if tessdata.is_dir() and "TESSDATA_PREFIX" not in env:  # Tesseract empaquetado/portable
         env["TESSDATA_PREFIX"] = str(tessdata)
@@ -199,7 +210,11 @@ def _get_rapid():
             from rapidocr import RapidOCR
 
             # Rutas explícitas: RapidOCR nunca entra en su rama de descarga de modelos.
-            _rapid_engine = RapidOCR(params={**paths, "Global.log_level": "warning"})
+            params: dict[str, Any] = {**paths, "Global.log_level": "warning"}
+            if _thread_limit is not None:
+                params["EngineConfig.onnxruntime.intra_op_num_threads"] = _thread_limit
+                params["EngineConfig.onnxruntime.inter_op_num_threads"] = 1
+            _rapid_engine = RapidOCR(params=params)
     return _rapid_engine
 
 

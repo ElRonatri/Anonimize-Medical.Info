@@ -94,6 +94,31 @@ def _network_is_blocked() -> bool:
     return False
 
 
+def _parallel_batch_works() -> bool:
+    """Un lote de 3 textos ficticios con 2 procesos de extracción (prueba spawn/freeze_support)."""
+    import base64
+    import os
+    import time
+
+    from api import Api
+
+    api = Api()
+    try:
+        files = [{"name": f"ficticio_{n}.txt", "data": base64.b64encode(SELF_TEST_TEXT.encode()).decode()}
+                 for n in range(3)]
+        job = api.start_batch(files, {"max_workers": 2, "parallel": "force"})
+        deadline = time.monotonic() + 120
+        state = api.get_job(job["job_id"])
+        while not state["done"] and time.monotonic() < deadline:
+            time.sleep(0.1)
+            state = api.get_job(job["job_id"])
+        pids = {item["worker"] for item in state["items"]}
+        return (state["done"] and all(item["status"] == "done" for item in state["items"])
+                and os.getpid() not in pids)
+    finally:
+        api.shutdown()
+
+
 def _ocr_works(engine: str) -> bool:
     """OCR real, sin conexión, sobre una página sintética generada en memoria."""
     import io
@@ -134,6 +159,7 @@ def self_test(expect_ocr: str | None = None) -> dict:
     checks["frontend_bundled"] = find_frontend() is not None
     checks["aho_corasick"] = fastmatch.AVAILABLE  # pyahocorasick empaquetado
     checks["network_blocked"] = _network_is_blocked()
+    checks["parallel_batch"] = _parallel_batch_works()
     if expect_ocr:
         checks[f"ocr_{expect_ocr}"] = _ocr_works(expect_ocr)
     return {
@@ -176,7 +202,10 @@ def run_window(config: Config) -> None:
     # debug=True (DevTools, menú "Inspeccionar") sólo en desarrollo; ver dev_mode_allowed().
     # private_mode=False permite que la interfaz recuerde preferencias (idioma, tema, opciones);
     # nunca se guarda contenido clínico ni los términos personalizados (ver frontend/src/App.jsx).
-    webview.start(debug=dev, http_server=not dev, private_mode=False)
+    try:
+        webview.start(debug=dev, http_server=not dev, private_mode=False)
+    finally:
+        api.shutdown()  # cierra los procesos de extracción
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -206,4 +235,9 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    # Imprescindible en el ejecutable de PyInstaller: los procesos de extracción en paralelo
+    # relanzan el .exe y deben ejecutar su tarea en lugar de abrir otra ventana.
+    import multiprocessing
+
+    multiprocessing.freeze_support()
     sys.exit(main())

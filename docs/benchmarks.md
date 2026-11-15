@@ -71,3 +71,27 @@ espacios múltiples, tabuladores) deben producir salida idéntica (`tests/test_f
 
 La deduplicación de alternativas de la regex combinada usaba `if x not in lista` (O(n²): ~16
 millones de comparaciones con 4 000 valores). Ahora usa `dict.fromkeys` (O(n)).
+
+## Bloque 4: lotes en paralelo
+
+`scripts/bench_batch.py` procesa lotes de documentos ficticios con 1, 2 y 3 procesos de extracción
+(equipo de 4 núcleos). Tiempo total del lote, de la cola al último resultado:
+
+```bash
+python scripts/bench_batch.py --docs 8 --workers 1 2 3
+```
+
+| Lote | 1 proceso | 2 procesos | 3 procesos |
+|---|---:|---:|---:|
+| 8 PDFs escaneados, 3 páginas, OCR Tesseract | 38,1 s | 20,1 s (**×1,89**) | 13,7 s (**×2,78**) |
+| 8 PDFs con texto (4 KB c/u) | 0,20 s | 0,38 s (×0,53) | 0,41 s (×0,50) |
+
+- **El OCR escala casi linealmente** con los procesos. La lectura de PDF (pdfminer, Python puro)
+  también se beneficia, pero en documentos livianos el arranque de los procesos (~0,2-0,4 s, una
+  vez por sesión) cuesta más que el trabajo. Por eso el paralelo se usa sólo si vale la pena: con
+  OCR forzado, lotes de 1 MB o más, o si los procesos ya están activos de un lote anterior.
+- **Sobresuscripción de hilos:** sin límite, Tesseract (OpenMP) y onnxruntime intentan usar todos
+  los núcleos en cada proceso; con 2 procesos se estorbaban hasta superar 180 s por página. Cada
+  proceso usa ahora `núcleos / procesos` hilos (`OMP_THREAD_LIMIT`, `intra_op_num_threads`).
+  Incluso con un solo proceso, Tesseract limitado a 1 hilo fue más rápido (4,2 s frente a 5,1 s
+  en 3 páginas).

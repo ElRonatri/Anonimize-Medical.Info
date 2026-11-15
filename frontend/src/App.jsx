@@ -23,6 +23,7 @@ const DEFAULT_OPTIONS = {
   aggressive_numbers: false,
   ocr_mode: 'auto',
   ocr_engine: 'auto',
+  max_workers: 'auto',
   custom_terms: [],
   whitelist: [],
 }
@@ -98,7 +99,8 @@ export default function App() {
     () => ({ ...options, exclude: excluded.flatMap((e) => e.values) }),
     [options, excluded],
   )
-  const optionsKey = JSON.stringify(requestOptions)
+  // max_workers sólo afecta a lotes nuevos: no requiere re-anonimizar lo ya procesado.
+  const optionsKey = JSON.stringify({ ...requestOptions, max_workers: undefined })
 
   // ---------------------------------------------------------------- utilidades de estado
   const errorText = useCallback(
@@ -196,7 +198,20 @@ export default function App() {
         }
         return
       }
-      setJob((j) => (j?.id === job.id ? { ...j, total: state.total, completed: state.completed, current: state.current } : j))
+      setJob((j) =>
+        j?.id === job.id
+          ? {
+              ...j,
+              total: state.total,
+              completed: state.completed,
+              current: state.current,
+              active: state.active,
+              workers: state.workers,
+              mode: state.mode,
+              eta_seconds: state.eta_seconds,
+            }
+          : j,
+      )
       timer = setTimeout(tick, POLL_MS)
     }
     timer = setTimeout(tick, 80)
@@ -228,7 +243,11 @@ export default function App() {
     return () => clearTimeout(timer)
   }, [optionsKey, job, hasDone]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const cancelJob = () => job && backend.cancelJob(job.id)
+  const cancelJob = () => {
+    if (!job) return
+    setJob((j) => (j ? { ...j, cancelling: true } : j))
+    backend.cancelJob(job.id)
+  }
 
   const removeItem = (id) => {
     backend.removeItems([id])
