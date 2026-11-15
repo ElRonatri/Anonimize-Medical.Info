@@ -129,6 +129,14 @@ build.bat / run.bat / run-dev.bat
 2. Motor: agrega los marcadores en `backend/anonymizer/lang.py` (`PLACEHOLDERS`, `PAGE_LABEL`,
    palabras frecuentes para la detección) y las etiquetas del idioma en `backend/anonymizer/rules.py`.
 
+## Licencia
+
+Distribuido bajo la licencia [MIT](LICENSE). Se entrega «tal cual», sin garantías: la anonimización
+automática puede omitir datos y el resultado siempre debe revisarse antes de compartirlo.
+
+Los componentes de terceros que se incluyen en el ejecutable mantienen sus propias licencias
+(pdfplumber: MIT; pywebview: BSD-3-Clause; python-docx: MIT; Tesseract y RapidOCR: Apache-2.0).
+
 ---
 
 ## English summary
@@ -139,3 +147,5 @@ Spanish and English documents, and returns Markdown or plain text ready to copy.
 locally. Supports batch processing, offline OCR (Tesseract or RapidOCR), export to Markdown, text, Word and
 JSON, and an exceptions list. Build with `build.bat` (`--ocr` / `--tesseract` to bundle OCR). Always review
 the output before sharing.
+
+Licensed under the [MIT License](LICENSE).
