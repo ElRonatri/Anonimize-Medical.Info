@@ -150,11 +150,14 @@ Regla del proyecto: **todo motor que aumente el tamaño del ejecutable es una va
 y se activa explícitamente; el build base nunca lo incluye, aunque esté instalado en el entorno.
 Las opciones se pueden combinar (`build.bat --ocr --tesseract`).
 
-| Variante | Comando | Incluye | OCR sin instalar nada más |
-|---|---|---|---|
-| base | `build.bat` | motor de anonimización, exportación | no (usa Tesseract si el equipo lo tiene) |
-| ocr | `build.bat --ocr` | + RapidOCR con sus modelos ONNX | sí |
-| tesseract | `build.bat --tesseract` | + Tesseract portable (con los idiomas instalados) | sí |
+| Variante | Comando | Incluye | OCR sin instalar nada más | Tamaño* |
+|---|---|---|---|---:|
+| base | `build.bat` | motor de anonimización, exportación | no (usa Tesseract si el equipo lo tiene) | 73 MB |
+| ocr | `build.bat --ocr` | + RapidOCR con sus modelos ONNX | sí | 293 MB |
+| tesseract | `build.bat --tesseract` | + Tesseract portable (con los idiomas instalados) | sí | 275 MB |
+
+\* Carpeta `dist\AnonimizeMedical` sin comprimir, medida por el CI en Windows (la variante
+tesseract con los idiomas que trae el instalador de Chocolatey; varía según los idiomas incluidos).
 
 El CI compila y prueba las tres variantes en Windows (la autoprueba exige que el OCR de la
 variante funcione sin conexión) e informa el tamaño de cada una.
