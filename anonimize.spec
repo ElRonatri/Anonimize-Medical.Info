@@ -14,9 +14,20 @@ if not (DIST_UI / "index.html").exists():
 
 datas = [(str(DIST_UI), "web")]
 datas += collect_data_files("webview")
+datas += collect_data_files("docx")  # plantillas de python-docx (default.docx, estilos)
 binaries = collect_dynamic_libs("pypdfium2_raw")
 
-hiddenimports = ["pdfplumber", "pdfminer", "pypdfium2", "pyperclip"]
+hiddenimports = ["pdfplumber", "pdfminer", "pypdfium2", "pyperclip", "docx", "pytesseract"]
+
+# Tesseract empaquetado (build.bat --tesseract): copia la instalación local a "tesseract/".
+import os
+
+tesseract_dir = os.environ.get("BUNDLE_TESSERACT_DIR")
+if tesseract_dir:
+    tess = Path(tesseract_dir)
+    if not (tess / "tesseract.exe").is_file():
+        raise SystemExit(f"No se encontró tesseract.exe en {tess}")
+    datas.append((str(tess), "tesseract"))
 
 # OCR opcional: se incluye sólo si está instalado (pip install -r requirements-ocr.txt)
 try:

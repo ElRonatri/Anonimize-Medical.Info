@@ -38,6 +38,7 @@ class Document:
     name: str
     pages: list[Page] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    ocr_engine: str | None = None
 
     def full_text(self) -> str:
         return "\n".join(b.flat_text() for p in self.pages for b in p.blocks)

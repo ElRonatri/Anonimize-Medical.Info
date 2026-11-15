@@ -6,6 +6,7 @@ import io
 import re
 import logging
 from pathlib import Path
+from typing import Callable
 
 from .document import Block, Document, Page
 from . import ocr
@@ -20,16 +21,27 @@ class ExtractionError(Exception):
     pass
 
 
-def load_document(path: str | Path, use_ocr: bool = True) -> Document:
+# Callback de progreso: (página_actual, total_páginas, etapa) con etapa "text" u "ocr".
+Progress = Callable[[int, int, str], None]
+
+OCR_AUTO, OCR_FORCE, OCR_OFF = "auto", "force", "off"
+MIN_TEXT_CHARS = 25  # menos caracteres que esto + imagen grande => página escaneada
+
+
+def load_document(path: str | Path, ocr_mode: str = OCR_AUTO, ocr_engine: str = "auto",
+                  progress: Progress | None = None, use_ocr: bool | None = None) -> Document:
     path = Path(path)
-    data = path.read_bytes()
-    return load_bytes(path.name, data, use_ocr=use_ocr)
+    return load_bytes(path.name, path.read_bytes(), ocr_mode=ocr_mode, ocr_engine=ocr_engine,
+                      progress=progress, use_ocr=use_ocr)
 
 
-def load_bytes(name: str, data: bytes, use_ocr: bool = True) -> Document:
+def load_bytes(name: str, data: bytes, ocr_mode: str = OCR_AUTO, ocr_engine: str = "auto",
+               progress: Progress | None = None, use_ocr: bool | None = None) -> Document:
+    if use_ocr is False:  # compatibilidad con la firma anterior
+        ocr_mode = OCR_OFF
     suffix = Path(name).suffix.lower()
     if suffix == ".pdf" or data[:5] == b"%PDF-":
-        return _load_pdf(name, data, use_ocr)
+        return _load_pdf(name, data, ocr_mode, ocr_engine, progress)
     if suffix in (".txt", ".md", ".text", ""):
         return load_text(_decode(data), name=name)
     raise ExtractionError(f"unsupported:{suffix}")
@@ -57,7 +69,8 @@ def _decode(data: bytes) -> str:
 
 # --------------------------------------------------------------------------- PDF
 
-def _load_pdf(name: str, data: bytes, use_ocr: bool) -> Document:
+def _load_pdf(name: str, data: bytes, ocr_mode: str, ocr_engine: str,
+              progress: Progress | None) -> Document:
     import pdfplumber
 
     doc = Document(name=name)
@@ -66,8 +79,12 @@ def _load_pdf(name: str, data: bytes, use_ocr: bool) -> Document:
     except Exception as exc:  # pdfminer lanza varios tipos distintos
         raise ExtractionError(f"invalid_pdf:{exc}") from exc
 
+    engine = ocr.pick_engine(ocr_engine) if ocr_mode != OCR_OFF else None
     with pdf:
+        total = len(pdf.pages)
         for index, pdf_page in enumerate(pdf.pages, start=1):
+            if progress:
+                progress(index, total, "text")
             page = Page(number=index)
             try:
                 page.blocks = _extract_page_blocks(pdf_page)
@@ -76,21 +93,42 @@ def _load_pdf(name: str, data: bytes, use_ocr: bool) -> Document:
                 doc.warnings.append(f"page_error:{index}:{exc}")
                 page.blocks = []
 
-            if page.empty and use_ocr and ocr.available():
+            if engine and _needs_ocr(pdf_page, page, ocr_mode):
+                if progress:
+                    progress(index, total, "ocr")
                 try:
-                    lines = ocr.ocr_page(pdf_page)
-                    page.blocks = [Block("line", text=t) for t in lines]
-                    page.ocr = True
+                    lines = ocr.ocr_page(pdf_page, engine)
+                    if any(t.strip() for t in lines):
+                        page.blocks = [Block("line", text=t) for t in lines]
+                        page.ocr = True
                 except Exception as exc:
                     log.exception("Error de OCR en página %s", index)
                     doc.warnings.append(f"ocr_error:{index}:{exc}")
             doc.pages.append(page)
 
     if doc.pages and all(p.empty for p in doc.pages):
-        doc.warnings.append("no_text" if not ocr.available() else "no_text_after_ocr")
-    elif any(p.empty for p in doc.pages) and not ocr.available():
+        doc.warnings.append("no_text_after_ocr" if engine else "no_text")
+    elif any(p.empty for p in doc.pages) and not engine:
         doc.warnings.append("some_pages_without_text")
+    if any(p.ocr for p in doc.pages):
+        doc.ocr_engine = engine
     return doc
+
+
+def _needs_ocr(pdf_page, page: Page, mode: str) -> bool:
+    """¿Conviene reconocer esta página como imagen?"""
+    if mode == OCR_FORCE or page.empty:
+        return True
+    chars = sum(len(b.flat_text().strip()) for b in page.blocks)
+    if chars >= MIN_TEXT_CHARS:
+        return False
+    # Poco texto (p. ej. sólo un pie de página) y una imagen que cubre gran parte de la página.
+    page_area = float(pdf_page.width * pdf_page.height) or 1.0
+    try:
+        image_area = sum(abs((im["x1"] - im["x0"]) * (im["bottom"] - im["top"])) for im in pdf_page.images)
+    except Exception:
+        return False
+    return image_area / page_area > 0.3
 
 
 def _extract_page_blocks(pdf_page) -> list[Block]:

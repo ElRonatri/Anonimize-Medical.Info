@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Lock, TriangleAlert, X } from 'lucide-react'
+import { CircleCheck, Lock, TriangleAlert, X } from 'lucide-react'
 import Header from './components/Header.jsx'
 import InputPanel from './components/InputPanel.jsx'
 import OptionsPanel from './components/OptionsPanel.jsx'
 import ResultPanel from './components/ResultPanel.jsx'
 import EntitiesPanel from './components/EntitiesPanel.jsx'
+import JobProgress from './components/JobProgress.jsx'
 import { backend, copyText, getApi } from './api.js'
 import { useI18n } from './i18n.jsx'
 import { loadPref, savePref } from './storage.js'
@@ -20,8 +21,13 @@ const DEFAULT_OPTIONS = {
   page_markers: true,
   region: 'general',
   aggressive_numbers: false,
+  ocr_mode: 'auto',
+  ocr_engine: 'auto',
   custom_terms: [],
+  whitelist: [],
 }
+
+const POLL_MS = 250
 
 function initialTheme() {
   const saved = loadPref('theme')
@@ -29,9 +35,7 @@ function initialTheme() {
   return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
-function baseName(name) {
-  return (name || 'documento').replace(/\.[^.]+$/, '')
-}
+const ocrKeyOf = (o) => `${o.ocr_mode}|${o.ocr_engine}`
 
 export default function App() {
   const { t } = useI18n()
@@ -40,36 +44,40 @@ export default function App() {
   const [backendMissing, setBackendMissing] = useState(false)
 
   const [options, setOptions] = useState(() => ({ ...DEFAULT_OPTIONS, ...loadPref('options', {}) }))
-  const [customDraft, setCustomDraft] = useState(() => (options.custom_terms || []).join('\n'))
   const [excluded, setExcluded] = useState([])
 
   const [mode, setMode] = useState('file')
   const [pasteText, setPasteText] = useState('')
-  const [source, setSource] = useState(null)
-  const [result, setResult] = useState(null)
-  const [text, setText] = useState('')
-  const [edited, setEdited] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [message, setMessage] = useState(null) // { kind: 'error' | 'warning', text }
+
+  // Documentos: estado por archivo, resultado y texto (editable) por id.
+  const [items, setItems] = useState([])
+  const [results, setResults] = useState({})
+  const [drafts, setDrafts] = useState({})
+  const [selectedId, setSelectedId] = useState(null)
+  const [job, setJob] = useState(null) // { id, total, completed, current }
+  const [updating, setUpdating] = useState(false)
+
+  const [message, setMessage] = useState(null) // { kind: 'error' | 'warning' | 'success', text }
   const [copied, setCopied] = useState(false)
-  const [saved, setSaved] = useState(false)
 
-  const requestId = useRef(0)
+  const resultsRef = useRef(results)
+  resultsRef.current = results
+  const appliedKey = useRef('') // opciones con las que se calcularon los resultados actuales
+  const appliedOcrKey = useRef('')
+  const pastedCount = useRef(0)
 
-  // ---------------------------------------------------------------- tema
+  // ---------------------------------------------------------------- tema / backend
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
     savePref('theme', theme)
   }, [theme])
 
-  // ---------------------------------------------------------------- backend
   useEffect(() => {
     getApi().then((api) => {
       if (!api) return setBackendMissing(true)
       backend.info().then((res) => res && !res.error && setInfo(res))
     })
-    // Evita que soltar un archivo fuera de la zona navegue a él.
-    const prevent = (e) => e.preventDefault()
+    const prevent = (e) => e.preventDefault() // soltar fuera de la zona no debe navegar al archivo
     window.addEventListener('dragover', prevent)
     window.addEventListener('drop', prevent)
     return () => {
@@ -84,91 +92,173 @@ export default function App() {
     () => ({ ...options, exclude: excluded.flatMap((e) => e.values) }),
     [options, excluded],
   )
+  const optionsKey = JSON.stringify(requestOptions)
 
-  // ---------------------------------------------------------------- procesamiento
-  const handleResponse = useCallback(
-    (res, id, newSource) => {
-      if (id !== requestId.current) return // respuesta obsoleta
-      setLoading(false)
-      if (!res?.ok) {
-        if (res?.cancelled) return
-        const key = `errors.${res?.error}`
-        const msg = t(key) === key ? t('errors.generic') : t(key)
-        setMessage({ kind: 'error', text: msg })
-        return
-      }
-      setResult(res)
-      setText(res.text)
-      setEdited(false)
-      if (newSource) setSource({ ...newSource, pages: res.pages })
-
-      const warnings = (res.warnings || [])
-        .map((w) => w.split(':')[0])
-        .filter((w, i, arr) => arr.indexOf(w) === i)
-        .map((w) => t(`warnings.${w}`))
-      if (res.ocr_pages) warnings.push(t('warnings.ocr_used', res.ocr_pages))
-      setMessage(warnings.length ? { kind: 'warning', text: warnings.join(' ') } : null)
+  // ---------------------------------------------------------------- utilidades de estado
+  const errorText = useCallback(
+    (code) => {
+      const key = `errors.${code}`
+      return t(key) === key ? t('errors.generic') : t(key)
     },
     [t],
   )
 
-  const run = useCallback(
-    async (fn, newSource) => {
-      const id = ++requestId.current
-      setLoading(true)
-      setMessage(null)
-      const res = await fn()
-      handleResponse(res, id, newSource)
+  const mergeItems = useCallback((updates) => {
+    if (!updates?.length) return
+    const byId = Object.fromEntries(updates.map((u) => [u.id, u]))
+    setItems((prev) => prev.map((it) => (byId[it.id] ? { ...it, ...byId[it.id] } : it)))
+  }, [])
+
+  const applyResults = useCallback((map) => {
+    const entries = Object.entries(map || {}).filter(([, r]) => r?.ok)
+    if (!entries.length) return
+    setResults((prev) => ({ ...prev, ...Object.fromEntries(entries) }))
+    setDrafts((prev) => ({
+      ...prev,
+      ...Object.fromEntries(entries.map(([id, r]) => [id, { text: r.text, edited: false }])),
+    }))
+  }, [])
+
+  // ---------------------------------------------------------------- lotes
+  const startJob = useCallback(
+    (res, { append }) => {
+      if (!res?.ok) {
+        setMessage({ kind: 'error', text: errorText(res?.error) })
+        return
+      }
+      appliedKey.current = optionsKey
+      appliedOcrKey.current = ocrKeyOf(options)
+      if (append) {
+        setItems((prev) => [...prev, ...res.items.map((i) => ({ ...i, kind: 'file' }))])
+        setSelectedId((cur) => cur ?? res.items[0]?.id ?? null)
+      } else {
+        mergeItems(res.items)
+      }
+      setJob({ id: res.job_id, total: res.items.length, completed: 0, current: null })
     },
-    [handleResponse],
+    [errorText, mergeItems, optionsKey, options],
   )
 
-  const pickFile = async () => {
-    const path = await backend.openFileDialog()
-    if (!path || typeof path !== 'string') {
-      if (path?.error === 'no_backend') setMessage({ kind: 'error', text: t('errors.no_backend') })
-      return
-    }
-    setExcluded([])
-    const name = path.split(/[\\/]/).pop()
-    run(() => backend.processFile(path, { ...options, exclude: [] }), { type: 'file', name })
+  const pickFiles = async () => {
+    const paths = await backend.openFileDialog()
+    if (paths?.error) return setMessage({ kind: 'error', text: errorText(paths.error) })
+    if (!Array.isArray(paths) || !paths.length) return
+    setMessage(null)
+    startJob(await backend.startBatchPaths(paths, requestOptions), { append: true })
   }
 
-  const dropFile = (file) => {
-    setExcluded([])
-    run(() => backend.processDroppedFile(file, { ...options, exclude: [] }), { type: 'file', name: file.name })
+  const dropFiles = async (files) => {
+    setMessage(null)
+    startJob(await backend.startBatchFiles(files, requestOptions), { append: true })
   }
 
-  const submitText = () => {
-    setExcluded([])
-    run(() => backend.processText(pasteText, { ...options, exclude: [] }), { type: 'text', name: 'texto' })
+  const submitText = async () => {
+    const res = await backend.processText(pasteText, requestOptions)
+    if (!res?.ok) return setMessage({ kind: 'error', text: errorText(res?.error) })
+    pastedCount.current += 1
+    appliedKey.current = optionsKey
+    setItems((prev) => [...prev, { ...res.item, name: t('pastedText', pastedCount.current), kind: 'text' }])
+    applyResults({ [res.item.id]: res.result })
+    setSelectedId(res.item.id)
+    setMessage(null)
   }
 
-  // Re-procesar al cambiar opciones o exclusiones (sin volver a leer el PDF).
-  const firstRender = useRef(true)
+  // Consulta periódica del avance mientras el backend procesa en su hilo secundario.
   useEffect(() => {
-    if (firstRender.current) {
-      firstRender.current = false
-      return
+    if (!job?.id) return undefined
+    let stopped = false
+    let timer
+    const tick = async () => {
+      const state = await backend.getJob(job.id, Object.keys(resultsRef.current))
+      if (stopped) return
+      if (!state?.ok) {
+        setJob(null)
+        return
+      }
+      mergeItems(state.items)
+      applyResults(state.results)
+      if (state.done) {
+        setJob(null)
+        const errors = state.items.filter((i) => i.status === 'error').length
+        const done = state.items.filter((i) => i.status === 'done').length
+        if (state.items.length > 1 || errors) {
+          setMessage(
+            errors
+              ? { kind: 'warning', text: `${t('jobDone', done)} · ${errors} ${t('status.error').toLowerCase()}` }
+              : { kind: 'success', text: t('jobDone', done) },
+          )
+        }
+        return
+      }
+      setJob((j) => (j?.id === job.id ? { ...j, total: state.total, completed: state.completed, current: state.current } : j))
+      timer = setTimeout(tick, POLL_MS)
     }
-    if (!source) return
-    const timer = setTimeout(() => run(() => backend.reprocess(requestOptions)), 150)
-    return () => clearTimeout(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestOptions])
+    timer = setTimeout(tick, 80)
+    return () => {
+      stopped = true
+      clearTimeout(timer)
+    }
+  }, [job?.id, mergeItems, applyResults, t])
 
-  // ---------------------------------------------------------------- acciones
-  const applyCustom = () => {
-    const terms = customDraft
-      .split('\n')
-      .map((s) => s.trim())
-      .filter(Boolean)
-    setOptions((o) => ({ ...o, custom_terms: terms }))
+  // Al cambiar opciones: re-anonimizar en memoria (ms) o, si cambió el OCR, releer archivos.
+  const hasDone = items.some((i) => i.status === 'done')
+  useEffect(() => {
+    if (job || !hasDone || optionsKey === appliedKey.current) return undefined
+    const timer = setTimeout(async () => {
+      const ocrKey = ocrKeyOf(options)
+      const fileIds = items.filter((i) => i.kind === 'file' && i.status === 'done').map((i) => i.id)
+      if (ocrKey !== appliedOcrKey.current && fileIds.length) {
+        startJob(await backend.reloadItems(fileIds, requestOptions), { append: false })
+        return
+      }
+      appliedOcrKey.current = ocrKey
+      appliedKey.current = optionsKey
+      setUpdating(true)
+      const res = await backend.reprocess(requestOptions)
+      setUpdating(false)
+      if (res?.ok) applyResults(res.results)
+      else setMessage({ kind: 'error', text: errorText(res?.error) })
+    }, 150)
+    return () => clearTimeout(timer)
+  }, [optionsKey, job, hasDone]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const cancelJob = () => job && backend.cancelJob(job.id)
+
+  const removeItem = (id) => {
+    backend.removeItems([id])
+    setItems((prev) => {
+      const next = prev.filter((i) => i.id !== id)
+      if (selectedId === id) setSelectedId(next[0]?.id ?? null)
+      return next
+    })
+    setResults(({ [id]: _r, ...rest }) => rest)
+    setDrafts(({ [id]: _d, ...rest }) => rest)
+  }
+
+  const clearAll = () => {
+    backend.removeItems(items.map((i) => i.id))
+    setItems([])
+    setResults({})
+    setDrafts({})
+    setSelectedId(null)
+    setExcluded([])
+    setMessage(null)
+  }
+
+  // ---------------------------------------------------------------- acciones sobre el resultado
+  const selected = items.find((i) => i.id === selectedId) ?? null
+  const result = selected ? results[selected.id] : null
+  const draft = selected ? drafts[selected.id] : null
+  const doneItems = items.filter((i) => results[i.id])
+
+  const docPayload = (item) => {
+    const { text: _text, ...meta } = results[item.id] || {}
+    return { id: item.id, name: item.name, text: drafts[item.id]?.text ?? '', edited: !!drafts[item.id]?.edited, meta }
   }
 
   const copy = async () => {
-    const ok = await copyText(text)
-    if (ok) {
+    if (!draft) return
+    if (await copyText(draft.text)) {
       setCopied(true)
       setTimeout(() => setCopied(false), 1800)
     } else {
@@ -176,19 +266,39 @@ export default function App() {
     }
   }
 
-  const save = async () => {
-    const ext = result?.format === 'text' ? 'txt' : 'md'
-    const res = await backend.save(text, `${baseName(source?.name)}_anonimizado.${ext}`)
-    if (res?.ok) {
-      setSaved(true)
-      setTimeout(() => setSaved(false), 1800)
-    } else if (!res?.cancelled) {
-      setMessage({ kind: 'error', text: t(`errors.${res?.error}`) || t('errors.generic') })
-    }
+  const exportOne = async (fmt) => {
+    if (!selected || !result) return
+    const res = await backend.exportFile(docPayload(selected), fmt, requestOptions)
+    if (!res?.ok && !res?.cancelled) setMessage({ kind: 'error', text: errorText(res?.error) })
+  }
+
+  const exportAll = async (fmt, generic) => {
+    const res = await backend.exportBatch(doneItems.map(docPayload), fmt, requestOptions, generic)
+    if (res?.ok) setMessage({ kind: 'success', text: `${t('exportedMany', res.count)} ${res.folder}` })
+    else if (!res?.cancelled) setMessage({ kind: 'error', text: errorText(res?.error) })
   }
 
   const exclude = (entity) => setExcluded((list) => [...list, { category: entity.category, values: entity.values }])
   const restore = (index) => setExcluded((list) => list.filter((_, i) => i !== index))
+
+  // Avisos del documento seleccionado (OCR, páginas sin texto...).
+  const docWarnings = useMemo(() => {
+    if (!result) return []
+    const list = (result.warnings || [])
+      .map((w) => w.split(':')[0])
+      .filter((w, i, arr) => arr.indexOf(w) === i)
+      .map((w) => t(`warnings.${w}`))
+    if (result.ocr_pages) list.push(t('warnings.ocr_used', result.ocr_pages))
+    return list
+  }, [result, t])
+
+  const banner = message ?? (docWarnings.length ? { kind: 'warning', text: docWarnings.join(' ') } : null)
+  const bannerStyles = {
+    error: 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300',
+    warning: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300',
+    success: 'border-teal-200 bg-teal-50 text-teal-800 dark:border-teal-500/30 dark:bg-teal-500/10 dark:text-teal-300',
+  }
+  const BannerIcon = banner?.kind === 'success' ? CircleCheck : TriangleAlert
 
   // ---------------------------------------------------------------- render
   return (
@@ -206,55 +316,49 @@ export default function App() {
           <InputPanel
             mode={mode}
             onModeChange={setMode}
-            source={source}
-            loading={loading}
-            onPickFile={pickFile}
-            onDropFile={dropFile}
+            items={items}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            onRemove={removeItem}
+            onClear={clearAll}
+            busy={!!job}
+            onPickFiles={pickFiles}
+            onDropFiles={dropFiles}
             pasteText={pasteText}
             onPasteTextChange={setPasteText}
             onSubmitText={submitText}
           />
-          <OptionsPanel
-            options={options}
-            onChange={setOptions}
-            customDraft={customDraft}
-            onCustomDraftChange={setCustomDraft}
-            onApplyCustom={applyCustom}
-            info={info}
-          />
+          <OptionsPanel options={options} onChange={setOptions} info={info} />
         </aside>
 
         <section className="flex min-h-[32rem] flex-col gap-4 lg:min-h-0">
-          {message && (
-            <div
-              role="alert"
-              className={
-                message.kind === 'error'
-                  ? 'flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300'
-                  : 'flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300'
-              }
-            >
-              <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-              <span className="flex-1">{message.text}</span>
-              <button type="button" onClick={() => setMessage(null)} className="opacity-60 hover:opacity-100">
-                <X className="h-4 w-4" />
-              </button>
+          <JobProgress job={job} items={items} onCancel={cancelJob} />
+
+          {banner && (
+            <div role="alert" className={`flex items-start gap-2 rounded-xl border px-3 py-2 text-sm ${bannerStyles[banner.kind]}`}>
+              <BannerIcon className="mt-0.5 h-4 w-4 shrink-0" />
+              <span className="min-w-0 flex-1 break-words">{banner.text}</span>
+              {message && (
+                <button type="button" onClick={() => setMessage(null)} className="opacity-60 hover:opacity-100">
+                  <X className="h-4 w-4" />
+                </button>
+              )}
             </div>
           )}
 
           <ResultPanel
             result={result}
-            text={text}
-            onTextChange={(v) => {
-              setText(v)
-              setEdited(true)
-            }}
-            edited={edited}
-            loading={loading}
+            title={result ? selected?.name : null}
+            text={draft?.text ?? ''}
+            onTextChange={(v) => setDrafts((prev) => ({ ...prev, [selectedId]: { text: v, edited: true } }))}
+            edited={!!draft?.edited}
+            loading={!!selected && !result && ['queued', 'processing'].includes(selected.status)}
+            updating={updating}
             onCopy={copy}
-            onSave={save}
             copied={copied}
-            saved={saved}
+            onExport={exportOne}
+            onExportAll={exportAll}
+            doneCount={doneItems.length}
           />
 
           {result && (

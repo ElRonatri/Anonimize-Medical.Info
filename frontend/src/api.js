@@ -42,12 +42,23 @@ function fileToBase64(file) {
 export const backend = {
   info: () => call('get_app_info'),
   openFileDialog: () => call('open_file_dialog'),
-  processFile: (path, options) => call('process_file', path, options),
-  processDroppedFile: async (file, options) =>
-    call('process_base64', file.name, await fileToBase64(file), options),
+  // Lotes: el backend procesa en un hilo secundario; el avance se consulta con getJob.
+  startBatchPaths: (paths, options) => call('start_batch', paths.map((path) => ({ path })), options),
+  startBatchFiles: async (files, options) => {
+    const payload = await Promise.all(
+      files.map(async (file) => ({ name: file.name, data: await fileToBase64(file) })),
+    )
+    return call('start_batch', payload, options)
+  },
+  getJob: (jobId, known) => call('get_job', jobId, known),
+  cancelJob: (jobId) => call('cancel_job', jobId),
+  reloadItems: (ids, options) => call('reload_items', ids, options),
+  removeItems: (ids) => call('remove_items', ids),
   processText: (text, options) => call('process_text', text, options),
-  reprocess: (options) => call('reprocess', options),
-  save: (content, name) => call('save_result', content, name),
+  reprocess: (options, ids = null) => call('reprocess', options, ids),
+  exportFile: (document, fmt, options) => call('export_file', document, fmt, options),
+  exportBatch: (documents, fmt, options, genericNames) =>
+    call('export_batch', documents, fmt, options, genericNames),
   copy: (text) => call('copy_to_clipboard', text),
 }
 

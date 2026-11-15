@@ -12,7 +12,7 @@ export function Card({ title, icon: Icon, actions, children, className }) {
     >
       {(title || actions) && (
         <header className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800">
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+          <h2 className="flex min-w-0 items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
             {Icon && <Icon className="h-4 w-4 text-teal-600 dark:text-teal-400" />}
             {title}
           </h2>

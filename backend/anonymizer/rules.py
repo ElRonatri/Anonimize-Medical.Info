@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from dataclasses import dataclass
 
 # --------------------------------------------------------------------------- utilidades
@@ -191,11 +192,47 @@ def _alternation(labels) -> str:
 
 def compile_rule(rule: LabelRule) -> re.Pattern:
     sep = _SEP_REQUIRED if rule.colon_required else _SEP_OPTIONAL
-    return re.compile(rf"(?<![\w]){'(?:' + _alternation(rule.labels) + ')'}(?![\w]){sep}",
-                      re.IGNORECASE)
+    pattern = rf"(?<![\w]){'(?:' + _alternation(rule.labels) + ')'}(?![\w]){sep}"
+    # Las reglas se aplican sobre el texto completo YA EN MINÚSCULAS (ver `lower_same_length`),
+    # sin IGNORECASE (≈2x más rápido), y el espacio nunca cruza saltos de línea.
+    return re.compile(_single_line(pattern))
+
+
+# Minúsculas sin cambiar la longitud del texto (str.lower() puede alterarla en Unicode),
+# para que las posiciones encontradas sirvan sobre el texto original.
+_LOWER_TABLE = {c: c + 32 for c in range(ord("A"), ord("Z") + 1)}
+_LOWER_TABLE.update({c: c + 32 for c in range(0xC0, 0xDF) if c != 0xD7})
+
+
+def lower_same_length(text: str) -> str:
+    lowered = text.lower()  # rápido (C); sólo si conserva la longitud
+    return lowered if len(lowered) == len(text) else text.translate(_LOWER_TABLE)
+
+
+def _single_line(pattern: str) -> str:
+    return pattern.replace(r"\s", r"[ \t]")
 
 
 COMPILED_RULES = [(rule, compile_rule(rule)) for rule in LABEL_RULES]
+
+
+@lru_cache(maxsize=8)
+def combined_rules(professionals: bool, addresses: bool) -> tuple[re.Pattern, tuple[LabelRule, ...]]:
+    """Todas las reglas activas en UNA expresión precompilada (una sola pasada por el texto).
+
+    Cada regla es un grupo con nombre (r0, r1, ...) y `match.lastgroup` indica cuál coincidió.
+    El orden de LABEL_RULES define la prioridad si dos reglas empiezan en la misma posición.
+    """
+    active = tuple(r for r in LABEL_RULES
+                   if (professionals or r.category != "PROFESSIONAL")
+                   and (addresses or r.category != "ADDRESS"))
+    branches = []
+    for i, rule in enumerate(active):
+        sep = _SEP_REQUIRED if rule.colon_required else _SEP_OPTIONAL
+        branches.append(rf"(?P<r{i}>(?:{_alternation(rule.labels)})(?![\w]){sep})")
+    # (?=[a-z...]) descarta de inmediato las posiciones que no empiezan con letra.
+    pattern = rf"(?=[a-zà-þ])(?<![\w])(?:{'|'.join(branches)})"
+    return re.compile(_single_line(pattern)), active
 
 _ALL_LABELS = (PATIENT_LABELS + PROFESSIONAL_LABELS + PERSON_LABELS + RECORD_LABELS
                + ID_LABELS_STRONG + ID_LABELS_WEAK + BIRTH_LABELS + PHONE_LABELS
@@ -207,6 +244,12 @@ NEXT_LABEL_RE = re.compile(
 VALUE_STOP_RE = re.compile(r"\s{3,}|\t|\||;|\s+-\s+")
 
 # --------------------------------------------------------------------------- patrones
+
+# Prefiltros baratos: si una línea no los cumple, se omiten los patrones costosos.
+# Algo con forma de identificador: 6+ dígitos (con separadores simples), letras+dígitos
+# (CURP, Codice Fiscale, PAN), dígito-letra-dígito (MBI) o "<" (zona MRZ de pasaportes).
+ID_CANDIDATE_RE = re.compile(r"\d(?:[.\- /]?\d){5}|[A-Za-z]{3}\d{2}|\d[A-Za-z][A-Za-z0-9]\d|<")
+IP_HINT_RE = re.compile(r"\d\.\d{1,3}\.\d")
 
 MONTHS_ES = r"enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre"
 MONTHS_EN = r"january|february|march|april|may|june|july|august|september|october|november|december"

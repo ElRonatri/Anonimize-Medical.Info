@@ -17,12 +17,13 @@ NUMBERED_RE = re.compile(r"^\s*\d{1,2}[.)]\s+")
 KV_RE = re.compile(r"^([^:|]{1,45}?)\s*:\s*(.+)$")
 TIME_LIKE_RE = re.compile(r"\d\s*$")
 WIDE_GAP_RE = re.compile(r"\s{3,}")
+_DIGITS_RE = re.compile(r"\d+")
 
 
 # --------------------------------------------------------------------------- encabezados/pies repetidos
 
 def _signature(text: str) -> str:
-    return re.sub(r"\d+", "#", " ".join(text.lower().split()))
+    return _DIGITS_RE.sub("#", " ".join(text.lower().split()))
 
 
 def strip_repeated_lines(doc: Document, window: int = 4) -> Document:
@@ -71,8 +72,10 @@ def strip_repeated_lines(doc: Document, window: int = 4) -> Document:
 # --------------------------------------------------------------------------- markdown
 
 def _is_heading(text: str) -> bool:
+    if len(text) > 70 or text.upper() != text:  # descartes baratos primero
+        return False
     letters = [c for c in text if c.isalpha()]
-    if len(letters) < 3 or len(text) > 70 or len(text.split()) > 10:
+    if len(letters) < 3 or len(text.split()) > 10:
         return False
     if ":" in text.rstrip(":"):
         return False

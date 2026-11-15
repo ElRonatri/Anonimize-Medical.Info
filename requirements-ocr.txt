@@ -1,4 +1,6 @@
-# OPCIONAL: OCR local para PDFs escaneados (sin texto seleccionable).
-# Aumenta el tamaño del ejecutable (~100 MB). Funciona sin conexión.
+# OPCIONAL: motor OCR RapidOCR (ONNX), empaquetable sin instalar nada más en Windows.
+# Aumenta el tamaño del ejecutable (~100 MB). Funciona sin conexión (modelos incluidos).
+# Alternativa más liviana: instalar Tesseract en el equipo (ver README); pytesseract
+# ya viene en requirements.txt y se detecta automáticamente.
 rapidocr>=2.0
 onnxruntime>=1.17
