@@ -30,6 +30,8 @@ echo Instalando dependencias de Python...
 python -m pip install --upgrade pip >nul
 pip install -r requirements.txt pyinstaller || exit /b 1
 if "%WITH_OCR%"=="1" pip install -r requirements-ocr.txt || exit /b 1
+set BUNDLE_RAPIDOCR=
+if "%WITH_OCR%"=="1" set BUNDLE_RAPIDOCR=1
 
 set BUNDLE_TESSERACT_DIR=
 if "%WITH_TESS%"=="1" (

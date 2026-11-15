@@ -7,6 +7,10 @@ Motores soportados (se usa el primero disponible, o el elegido por el usuario):
   PATH y en las rutas de instalación típicas de Windows. Usa español + inglés si están instalados.
 * **RapidOCR** (ONNX): todo en paquetes de pip, modelos incluidos.
 
+Sin descargas: RapidOCR descargaría de internet los modelos que le falten. Aquí se le pasan
+SIEMPRE las rutas de los modelos incluidos en el paquete; si falta alguno, el motor se considera
+no disponible (nunca se intenta descargar). Además, el proceso bloquea la red (privacy.block_network).
+
 Privacidad: ninguna imagen ni texto se escribe en disco. La página rasterizada se envía a
 Tesseract por stdin y el texto se lee de stdout (sin archivos temporales); RapidOCR trabaja
 en memoria.
@@ -87,16 +91,32 @@ def _tesseract_ready() -> bool:
     return find_tesseract() is not None
 
 
-def _rapidocr_ready() -> bool:
-    try:
-        import numpy  # noqa: F401
+# Modelos que RapidOCR usa por defecto (se buscan dentro del propio paquete `rapidocr/models`).
+_RAPID_MODELS = {"Det.model_path": "*det*.onnx", "Rec.model_path": "*rec*.onnx", "Cls.model_path": "*cls*.onnx"}
+
+
+def rapid_model_paths() -> dict[str, str] | None:
+    """Rutas de los modelos empaquetados con rapidocr, o None si falta alguno."""
+    if "rapid_models" not in _cache:
+        paths: dict[str, str] | None = None
         try:
-            import rapidocr  # noqa: F401
+            import numpy  # noqa: F401
+            import rapidocr
+
+            models_dir = Path(rapidocr.__file__).resolve().parent / "models"
+            found = {key: sorted(models_dir.glob(pattern)) for key, pattern in _RAPID_MODELS.items()}
+            if all(found.values()):
+                paths = {key: str(files[0]) for key, files in found.items()}
+            else:
+                log.warning("RapidOCR sin modelos incluidos: el motor queda desactivado (no se descargan)")
         except ImportError:
-            import rapidocr_onnxruntime  # noqa: F401
-        return True
-    except ImportError:
-        return False
+            paths = None
+        _cache["rapid_models"] = paths
+    return _cache["rapid_models"]
+
+
+def _rapidocr_ready() -> bool:
+    return rapid_model_paths() is not None
 
 
 def available_engines() -> list[str]:
@@ -173,11 +193,13 @@ def _get_rapid():
     global _rapid_engine
     with _lock:
         if _rapid_engine is None:
-            try:
-                from rapidocr import RapidOCR
-            except ImportError:
-                from rapidocr_onnxruntime import RapidOCR
-            _rapid_engine = RapidOCR()
+            paths = rapid_model_paths()
+            if paths is None:
+                raise RuntimeError("rapidocr_models_missing")
+            from rapidocr import RapidOCR
+
+            # Rutas explícitas: RapidOCR nunca entra en su rama de descarga de modelos.
+            _rapid_engine = RapidOCR(params={**paths, "Global.log_level": "warning"})
     return _rapid_engine
 
 

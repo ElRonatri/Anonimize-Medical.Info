@@ -44,6 +44,7 @@ class Config:
     url: str
     self_test: bool
     self_test_report: Path | None
+    expect_ocr: str | None = None
 
 
 def dev_mode_allowed(requested: bool, frozen: bool) -> bool:
@@ -61,9 +62,11 @@ def parse_args(argv: list[str] | None = None) -> Config:
     parser.add_argument("--url", default=DEV_URL, help="URL del servidor de desarrollo")
     parser.add_argument("--self-test", action="store_true", help="verificar la instalación sin abrir la ventana")
     parser.add_argument("--self-test-report", type=Path, help="archivo JSON donde escribir el resultado")
+    parser.add_argument("--expect-ocr", choices=["tesseract", "rapidocr"],
+                        help="(autoprueba) exigir que este motor OCR funcione sin conexión")
     args = parser.parse_args(argv)
     return Config(dev=dev_mode_allowed(args.dev, is_frozen()), url=args.url, self_test=args.self_test,
-                  self_test_report=args.self_test_report)
+                  self_test_report=args.self_test_report, expect_ocr=args.expect_ocr)
 
 
 # --------------------------------------------------------------------------- autoprueba
@@ -74,7 +77,46 @@ SELF_TEST_TEXT = (
 )
 
 
-def self_test() -> dict:
+def _network_is_blocked() -> bool:
+    """Intenta resolver un dominio externo: debe fallar con NetworkBlockedError."""
+    import socket
+
+    from anonymizer.privacy import NetworkBlockedError, network_blocked
+
+    if not network_blocked():
+        return False
+    try:
+        socket.getaddrinfo("example.com", 443)
+    except NetworkBlockedError:
+        return True
+    except OSError:
+        return False
+    return False
+
+
+def _ocr_works(engine: str) -> bool:
+    """OCR real, sin conexión, sobre una página sintética generada en memoria."""
+    import io
+
+    from PIL import Image, ImageDraw, ImageFont
+
+    from anonymizer import load_bytes, ocr
+
+    if engine not in ocr.available_engines():
+        return False
+    image = Image.new("RGB", (1240, 400), "white")
+    draw = ImageDraw.Draw(image)
+    font = ImageFont.load_default(size=56)
+    draw.text((60, 80), "Nombre: Juana Prueba", fill="black", font=font)
+    draw.text((60, 200), "Hemoglobina 13.1 g/dL", fill="black", font=font)
+    pdf = io.BytesIO()
+    image.save(pdf, format="PDF", resolution=150)
+    doc = load_bytes("selftest.pdf", pdf.getvalue(), ocr_mode="force", ocr_engine=engine)
+    text = doc.full_text().lower()
+    return any(p.ocr for p in doc.pages) and "prueba" in text and "hemoglobina" in text
+
+
+def self_test(expect_ocr: str | None = None) -> dict:
     """Verifica que el motor, los exportadores y la interfaz empaquetada funcionen.
 
     Usa sólo datos ficticios y no escribe nada salvo el informe opcional.
@@ -91,6 +133,9 @@ def self_test() -> dict:
     checks["export_json"] = json.loads(export_bytes("json", text, result))["replacements"] > 0
     checks["frontend_bundled"] = find_frontend() is not None
     checks["aho_corasick"] = fastmatch.AVAILABLE  # pyahocorasick empaquetado
+    checks["network_blocked"] = _network_is_blocked()
+    if expect_ocr:
+        checks[f"ocr_{expect_ocr}"] = _ocr_works(expect_ocr)
     return {
         "ok": all(checks.values()),
         "version": __version__,
@@ -98,6 +143,7 @@ def self_test() -> dict:
         "checks": checks,
         "ocr_engines": ocr.available_engines(),
         "literal_engine": detector.literal_engine(),
+        "tesseract_cmd": ocr.find_tesseract(),  # ruta del ejecutable usado (para verificar el empaquetado)
     }
 
 
@@ -134,16 +180,18 @@ def run_window(config: Config) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    from anonymizer.privacy import configure_logging
+    from anonymizer.privacy import block_network, configure_logging
 
     config = parse_args(argv)
     configure_logging(dev=config.dev)
+    # Sin descargas ni conexiones externas: sólo se permite la red local (interfaz en 127.0.0.1).
+    block_network()
     if "--dev" in (argv if argv is not None else sys.argv[1:]) and not config.dev:
         logging.getLogger(__name__).warning("--dev se ignora en el ejecutable distribuido")
 
     if config.self_test:
         try:
-            report = self_test()
+            report = self_test(config.expect_ocr)
         except Exception as exc:  # el informe debe escribirse incluso si algo falla
             report = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
         payload = json.dumps(report, ensure_ascii=False, indent=2)

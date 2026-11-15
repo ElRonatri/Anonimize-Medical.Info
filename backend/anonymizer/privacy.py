@@ -48,3 +48,73 @@ def configure_logging(dev: bool = False) -> None:
         root.addHandler(handler)
     for name in QUIET_LOGGERS:
         logging.getLogger(name).setLevel(logging.WARNING)
+
+
+# --------------------------------------------------------------------------- red
+
+_LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost", "0.0.0.0", "", None}
+_network_blocked = False
+
+
+class NetworkBlockedError(PermissionError):
+    """Intento de conexión a internet desde la aplicación (prohibido por diseño)."""
+
+
+def _is_loopback(host: object) -> bool:
+    if isinstance(host, bytes):
+        host = host.decode("ascii", "ignore")
+    if host in _LOOPBACK_HOSTS:
+        return True
+    return isinstance(host, str) and (host.startswith("127.") or host.lower() == "localhost")
+
+
+_PROXY_VARS = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "FTP_PROXY")
+
+
+def _url_host(url: object) -> str:
+    from urllib.parse import urlsplit
+
+    return urlsplit(str(url)).hostname or ""
+
+
+def _audit(event: str, args: tuple) -> None:
+    if event == "urllib.Request":  # cubre peticiones que irían por un proxy (local o del sistema)
+        host = _url_host(args[0])
+    elif event == "socket.getaddrinfo":
+        host = args[0]
+    elif event == "socket.connect" or event == "socket.sendto":
+        address = args[1]
+        if not isinstance(address, tuple):  # sockets AF_UNIX / pipes locales
+            return
+        host = address[0]
+    else:
+        return
+    if not _is_loopback(host):
+        raise NetworkBlockedError("network_blocked")
+
+
+def block_network() -> None:
+    """Prohíbe cualquier conexión de red que no sea local (127.0.0.1 / ::1) en este proceso.
+
+    Garantía de "sin descargas después del build": ninguna librería (p. ej. un motor OCR que
+    intente bajar modelos) puede conectarse a internet. Se implementa con un *audit hook*
+    (PEP 578), que no se puede desinstalar. La interfaz (WebView2) corre en su propio proceso
+    y sólo carga los archivos locales servidos desde 127.0.0.1.
+    """
+    global _network_blocked
+    if not _network_blocked:
+        # Un proxy en 127.0.0.1 (corporativo, depuradores) reenviaría el tráfico hacia afuera:
+        # se anulan los proxies para que toda conexión sea directa y quede bloqueada. NO_PROXY=*
+        # también desactiva el proxy configurado en el registro de Windows (urllib/requests).
+        import os
+
+        for name in _PROXY_VARS:
+            os.environ.pop(name, None)
+            os.environ.pop(name.lower(), None)
+        os.environ["NO_PROXY"] = os.environ["no_proxy"] = "*"
+        sys.addaudithook(_audit)
+        _network_blocked = True
+
+
+def network_blocked() -> bool:
+    return _network_blocked

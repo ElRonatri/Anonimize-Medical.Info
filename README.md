@@ -90,8 +90,17 @@ CURP), sin validación de dígito verificador.
 
 Garantías del diseño, verificadas por pruebas automáticas (`tests/test_privacy.py`):
 
-- **Todo es local.** No hay llamadas de red ni servicios externos. La interfaz se sirve desde un
-  servidor interno de PyWebView en `127.0.0.1` que sólo entrega los archivos de la propia interfaz.
+- **Todo es local y sin descargas.** No hay llamadas de red ni servicios externos, y **nada se
+  descarga después del build** (ni modelos, ni paquetes, ni actualizaciones): todo lo que usa la
+  aplicación va dentro del ejecutable. Se garantiza por partida doble:
+  - el proceso de Python **bloquea cualquier conexión que no sea local** (un *audit hook* de
+    Python que no se puede desactivar). También se anulan los proxies, para que el tráfico no
+    pueda salir a través de un proxy local o del configurado en Windows;
+  - a RapidOCR (que por diseño descargaría los modelos que le falten) se le pasan siempre las
+    rutas de los modelos empaquetados; si falta alguno, el motor se desactiva.
+
+  La interfaz se sirve desde un servidor interno de PyWebView en `127.0.0.1` que sólo entrega
+  los archivos de la propia interfaz. La autoprueba del ejecutable verifica el bloqueo de red.
 - **Sin archivos temporales.** Los PDF se leen en memoria. El OCR con Tesseract recibe la imagen
   por la entrada estándar y devuelve el texto por la salida estándar; RapidOCR trabaja en memoria.
   Lo único que se escribe en disco son las exportaciones que el usuario guarda.
@@ -134,6 +143,21 @@ build.bat                :: base (usa Tesseract si está instalado en el equipo)
 build.bat --ocr          :: incluye el motor RapidOCR dentro del ejecutable (~100 MB más)
 build.bat --tesseract    :: copia Tesseract instalado dentro del ejecutable (portable)
 ```
+
+### Variantes de build
+
+Regla del proyecto: **todo motor que aumente el tamaño del ejecutable es una variante opcional**
+y se activa explícitamente; el build base nunca lo incluye, aunque esté instalado en el entorno.
+Las opciones se pueden combinar (`build.bat --ocr --tesseract`).
+
+| Variante | Comando | Incluye | OCR sin instalar nada más |
+|---|---|---|---|
+| base | `build.bat` | motor de anonimización, exportación | no (usa Tesseract si el equipo lo tiene) |
+| ocr | `build.bat --ocr` | + RapidOCR con sus modelos ONNX | sí |
+| tesseract | `build.bat --tesseract` | + Tesseract portable (con los idiomas instalados) | sí |
+
+El CI compila y prueba las tres variantes en Windows (la autoprueba exige que el OCR de la
+variante funcione sin conexión) e informa el tamaño de cada una.
 
 El resultado queda en `dist\AnonimizeMedical\AnonimizeMedical.exe` (carpeta portable: puedes
 comprimirla y copiarla a otro equipo).

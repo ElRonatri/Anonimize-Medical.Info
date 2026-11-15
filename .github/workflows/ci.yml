@@ -70,9 +70,14 @@ jobs:
         working-directory: frontend
 
   build-windows:
-    name: Build Windows (PyInstaller) + autoprueba
+    name: Build Windows (${{ matrix.variant }}) + autoprueba
     runs-on: windows-latest
     needs: [lint, test, frontend]
+    strategy:
+      fail-fast: false
+      matrix:
+        # Regla del proyecto: los motores que agrandan el ejecutable son variantes opcionales.
+        variant: [base, ocr, tesseract]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -91,22 +96,52 @@ jobs:
           npm ci
           npm run build
       - name: Dependencias
-        run: pip install -r requirements.txt pyinstaller
+        shell: pwsh
+        run: |
+          pip install -r requirements.txt pyinstaller
+          if ("${{ matrix.variant }}" -eq "ocr") { pip install -r requirements-ocr.txt }
+      - name: Tesseract (sólo para empaquetarlo; se descarga en tiempo de build)
+        if: matrix.variant == 'tesseract'
+        run: choco install tesseract -y --no-progress
       - name: PyInstaller
-        run: pyinstaller --noconfirm --clean anonimize.spec
-      - name: Autoprueba del ejecutable (sin ventana)
+        shell: pwsh
+        run: |
+          if ("${{ matrix.variant }}" -eq "ocr") { $env:BUNDLE_RAPIDOCR = "1" }
+          if ("${{ matrix.variant }}" -eq "tesseract") { $env:BUNDLE_TESSERACT_DIR = "C:\Program Files\Tesseract-OCR" }
+          pyinstaller --noconfirm --clean anonimize.spec
+      - name: Autoprueba del ejecutable (sin ventana ni red)
         shell: pwsh
         run: |
           $report = Join-Path $env:RUNNER_TEMP "self-test.json"
-          $p = Start-Process -FilePath "dist\AnonimizeMedical\AnonimizeMedical.exe" `
-                -ArgumentList "--self-test", "--self-test-report", "`"$report`"" -Wait -PassThru
+          $cliArgs = @("--self-test", "--self-test-report", "`"$report`"")
+          if ("${{ matrix.variant }}" -eq "ocr") { $cliArgs += @("--expect-ocr", "rapidocr") }
+          if ("${{ matrix.variant }}" -eq "tesseract") { $cliArgs += @("--expect-ocr", "tesseract") }
+          $p = Start-Process -FilePath "dist\AnonimizeMedical\AnonimizeMedical.exe" -ArgumentList $cliArgs -Wait -PassThru
           Get-Content $report
           if ($p.ExitCode -ne 0) { throw "La autoprueba falló (código $($p.ExitCode))" }
+          $data = Get-Content $report | ConvertFrom-Json
+          if ("${{ matrix.variant }}" -eq "tesseract" -and $data.tesseract_cmd -notlike "*_internal*") {
+            throw "Se usó un Tesseract del sistema en lugar del empaquetado: $($data.tesseract_cmd)"
+          }
           $v = (Get-Item "dist\AnonimizeMedical\AnonimizeMedical.exe").VersionInfo.ProductVersion
           Write-Host "Versión del ejecutable: $v"
           if (-not $v) { throw "El ejecutable no tiene información de versión" }
+      - name: Variante base sin motores pesados
+        if: matrix.variant == 'base'
+        shell: pwsh
+        run: |
+          foreach ($pkg in @("rapidocr", "onnxruntime", "tesseract")) {
+            if (Test-Path "dist\AnonimizeMedical\_internal\$pkg") { throw "La variante base incluye $pkg" }
+          }
+      - name: Tamaño de la variante
+        shell: pwsh
+        run: |
+          $bytes = (Get-ChildItem -Recurse "dist\AnonimizeMedical" | Measure-Object -Sum Length).Sum
+          $mb = [math]::Round($bytes / 1MB, 1)
+          Write-Host "Tamaño ${{ matrix.variant }}: $mb MB"
+          "| ${{ matrix.variant }} | $mb MB |" >> $env:GITHUB_STEP_SUMMARY
       - uses: actions/upload-artifact@v7
         with:
-          name: AnonimizeMedical-windows
+          name: AnonimizeMedical-windows-${{ matrix.variant }}
           path: dist/AnonimizeMedical
           retention-days: 7

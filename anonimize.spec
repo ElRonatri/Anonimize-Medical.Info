@@ -59,15 +59,29 @@ if tesseract_dir:
         raise SystemExit(f"No se encontró tesseract.exe en {tess}")
     datas.append((str(tess), "tesseract"))
 
-# OCR opcional: se incluye sólo si está instalado (pip install -r requirements-ocr.txt)
-try:
-    import rapidocr  # noqa: F401
+# ------------------------------------------------------------------ variantes de build
+# Regla: todo motor que aumente el tamaño del ejecutable es OPCIONAL y se activa explícitamente.
+#   (base)                     sin motores OCR empaquetados; usa Tesseract si está instalado
+#   BUNDLE_RAPIDOCR=1          + RapidOCR con sus modelos ONNX   (build.bat --ocr)
+#   BUNDLE_TESSERACT_DIR=...   + Tesseract portable              (build.bat --tesseract)
+# Nunca se descarga nada en tiempo de ejecución: los modelos van dentro del paquete.
+excludes = ["tkinter", "matplotlib", "pytest", "reportlab"]
+variant = ["base"]
 
-    datas += collect_data_files("rapidocr")
+if os.environ.get("BUNDLE_RAPIDOCR") == "1":
+    import rapidocr  # falla el build si se pidió la variante y no está instalado
+
+    datas += collect_data_files("rapidocr")  # incluye los modelos .onnx
     binaries += collect_dynamic_libs("onnxruntime")
     hiddenimports += ["rapidocr", "onnxruntime", "numpy"]
-except ImportError:
-    pass
+    variant.append("rapidocr")
+else:
+    excludes += ["rapidocr", "onnxruntime"]  # aunque estén instalados en el entorno
+
+if tesseract_dir:
+    variant.append("tesseract")
+
+print(f"Variante: {' + '.join(variant)}")
 
 a = Analysis(
     [str(ROOT / "backend" / "main.py")],
@@ -75,7 +89,7 @@ a = Analysis(
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
-    excludes=["tkinter", "matplotlib", "pytest", "reportlab"],
+    excludes=excludes,
     noarchive=False,
 )
 pyz = PYZ(a.pure)

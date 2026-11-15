@@ -16,6 +16,12 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 - `CHANGELOG.md` y configuración centralizada en `pyproject.toml`.
 
 ### Cambiado
+- **Sin descargas después del build:** el proceso bloquea toda conexión no local (audit hook de
+  Python, proxies anulados) y a RapidOCR se le pasan siempre las rutas de los modelos empaquetados
+  (antes los descargaba de internet si faltaban). La autoprueba lo verifica.
+- **Variantes de build explícitas:** RapidOCR sólo se incluye con `build.bat --ocr`
+  (`BUNDLE_RAPIDOCR=1`); el build base lo excluye aunque esté instalado. El CI compila y prueba
+  las variantes base, ocr y tesseract, con OCR real sin conexión.
 - **Rendimiento:** la propagación de nombres, apellidos, términos personalizados e
   identificadores usa Aho-Corasick (`pyahocorasick`, BSD-3-Clause, ~115 KB) cuando hay 100 o
   más valores: ×12,9 más rápido con 2 000 pacientes (12,9 s → 1,0 s), sin cambios con pocos
