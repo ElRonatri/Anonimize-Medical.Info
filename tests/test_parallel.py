@@ -123,7 +123,9 @@ def test_runs_concurrently_in_queue_order_with_eta(api, scanned):
     def observe(state):
         nonlocal max_active
         status = {i["id"]: i["status"] for i in state["items"]}
-        active = [i for i in order if status[i] == "processing"]
+        stage = {i["id"]: i["stage"] for i in state["items"]}
+        # Extracciones en curso (la anonimización final ocurre en el proceso principal).
+        active = [i for i in order if status[i] == "processing" and stage[i] != "anonymize"]
         max_active = max(max_active, len(active))
         if state["eta_seconds"] is not None:
             etas.append(state["eta_seconds"])

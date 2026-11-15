@@ -116,6 +116,11 @@ def extract_task(item_id: str, job_num: int, name: str, path: str | None, data: 
         progress(0, 0, "text")
         doc = load_bytes(name, read_source(path, data), ocr_mode=ocr_mode, ocr_engine=ocr_engine,
                          progress=progress)
+        if _progress_queue is not None:
+            # Avisar ANTES de tomar el siguiente archivo: la cola conserva el orden por proceso,
+            # así el estado nunca muestra más extracciones en curso que procesos.
+            pages = len(doc.pages)
+            _progress_queue.put((item_id, pages, pages, "anonymize"))
         return "ok", doc, pid
     except Cancelled:
         return "cancelled", None, pid
