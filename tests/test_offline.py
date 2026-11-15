@@ -92,6 +92,8 @@ def test_rapidocr_receives_explicit_model_paths(tmp_path, monkeypatch):
     fake.__file__ = str(package / "__init__.py")
     fake.RapidOCR = lambda params: received.update(params) or object()
     monkeypatch.setitem(sys.modules, "rapidocr", fake)
+    # numpy sólo existe en la variante ocr; aquí basta con que se pueda importar.
+    monkeypatch.setitem(sys.modules, "numpy", sys.modules.get("numpy") or types.ModuleType("numpy"))
     monkeypatch.setattr(ocr, "_cache", {})
     monkeypatch.setattr(ocr, "_rapid_engine", None)
     ocr._get_rapid()
