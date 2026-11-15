@@ -20,8 +20,8 @@ Uso independiente:
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional
 
 # Límites de token: no pegado a letras/dígitos.
 B = r"(?<![A-Za-z0-9])"
@@ -56,7 +56,7 @@ def v_cuit_ar(s: str) -> bool:
     if len(d) != 11:
         return False
     pesos = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2]
-    r = 11 - sum(int(a) * b for a, b in zip(d, pesos)) % 11
+    r = 11 - sum(int(a) * b for a, b in zip(d, pesos, strict=False)) % 11
     r = 0 if r == 11 else r
     return r != 10 and r == int(d[10])
 
@@ -97,7 +97,7 @@ def v_ci_uy(s: str) -> bool:
     if not 7 <= len(d) <= 8:
         return False
     cuerpo, dv = d[:-1].zfill(7), int(d[-1])
-    suma = sum(int(a) * b for a, b in zip(cuerpo, [2, 9, 8, 7, 6, 3, 4]))
+    suma = sum(int(a) * b for a, b in zip(cuerpo, [2, 9, 8, 7, 6, 3, 4], strict=False))
     return (10 - suma % 10) % 10 == dv
 
 
@@ -128,7 +128,7 @@ def v_nir_fr(s: str) -> bool:
 def v_id_cn(s: str) -> bool:
     s = s.upper()
     pesos = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2]
-    suma = sum(int(a) * b for a, b in zip(s[:17], pesos))
+    suma = sum(int(a) * b for a, b in zip(s[:17], pesos, strict=False))
     return "10X98765432"[suma % 11] == s[17]
 
 
@@ -202,7 +202,7 @@ class Patron:
     pais: str
     nombre: str
     regex: str
-    validador: Optional[Callable[[str], bool]] = None
+    validador: Callable[[str], bool] | None = None
     flags: int = 0
 
 
@@ -322,7 +322,7 @@ GENERAL = "general"  # sin capa por país (comportamiento base de la aplicación
 ALL = "all"
 
 
-def resolver_region(region: str | None) -> Optional[frozenset[str]]:
+def resolver_region(region: str | None) -> frozenset[str] | None:
     """Devuelve los códigos de país activos, frozenset() vacío = todos, None = desactivado."""
     if not region or region == GENERAL:
         return None
@@ -344,7 +344,7 @@ def formatos_por_pais() -> dict[str, list[str]]:
     return out
 
 
-def patrones_para(paises: Optional[frozenset[str]]) -> list[tuple[Patron, re.Pattern]]:
+def patrones_para(paises: frozenset[str] | None) -> list[tuple[Patron, re.Pattern]]:
     if paises is None:
         return []
     if not paises:  # todas
@@ -477,7 +477,7 @@ class Hallazgo:
     capa: str  # "estructural" | "contextual" | "agresiva"
 
 
-def _primer_caracter(cuerpo: str) -> Optional[str]:
+def _primer_caracter(cuerpo: str) -> str | None:
     """Clase del primer carácter de un patrón (para una anticipación rápida), o None."""
     while cuerpo.startswith("(?!"):  # saltar anticipaciones negativas iniciales
         nivel, i = 0, 0
@@ -516,7 +516,7 @@ def _compilar(p: Patron) -> re.Pattern:
 _COMPILADOS = [(p, _compilar(p)) for p in ESTRUCTURALES]
 
 
-def estructurales(texto: str, paises: Optional[frozenset[str]] = frozenset(),
+def estructurales(texto: str, paises: frozenset[str] | None = frozenset(),
                   validar: bool = True) -> list[Hallazgo]:
     hallazgos = []
     for p, rx in patrones_para(paises):
@@ -555,7 +555,7 @@ def agresivos(texto: str) -> list[Hallazgo]:
 
 
 def encontrar(texto: str, agresivo: bool = False, validar: bool = True,
-              paises: Optional[frozenset[str]] = frozenset()) -> list[Hallazgo]:
+              paises: frozenset[str] | None = frozenset()) -> list[Hallazgo]:
     """Devuelve los identificadores encontrados, sin solapamientos."""
     hallazgos = estructurales(texto, paises, validar) + contextuales(texto)
     if agresivo:

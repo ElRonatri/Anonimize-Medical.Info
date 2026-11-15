@@ -10,6 +10,7 @@ import io
 import json
 import re
 from datetime import datetime, timezone
+from typing import Any
 
 FORMATS = {
     "md": ("Markdown", ".md"),
@@ -73,7 +74,7 @@ def to_docx(text: str, markdown: bool = True) -> bytes:
 
     accent = RGBColor(0x0F, 0x76, 0x6E)
 
-    def add_runs(paragraph, content: str, bold: bool = False, italic: bool = False):
+    def add_runs(paragraph: Any, content: str, bold: bool = False, italic: bool = False) -> None:
         parts = _BOLD_RE.split(content) if markdown else [content]
         for part in parts:
             if not part:
@@ -95,7 +96,7 @@ def to_docx(text: str, markdown: bool = True) -> bytes:
     i = 0
     paragraph_lines: list[str] = []
 
-    def flush_paragraph():
+    def flush_paragraph() -> None:
         if paragraph_lines:
             p = doc.add_paragraph()
             for n, line in enumerate(paragraph_lines):
@@ -154,10 +155,10 @@ def to_docx(text: str, markdown: bool = True) -> bytes:
                 width = max(len(r) for r in rows)
                 table = doc.add_table(rows=len(rows), cols=width)
                 table.style = "Table Grid"
-                for r, row in enumerate(rows):
+                for r, cells in enumerate(rows):
                     for c in range(width):
                         cell = table.cell(r, c)
-                        add_runs(cell.paragraphs[0], row[c] if c < len(row) else "", bold=(r == 0))
+                        add_runs(cell.paragraphs[0], cells[c] if c < len(cells) else "", bold=(r == 0))
                 doc.add_paragraph()
             continue
 

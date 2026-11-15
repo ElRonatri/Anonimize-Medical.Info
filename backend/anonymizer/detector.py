@@ -98,7 +98,7 @@ class Options:
     exclude: list[str] = field(default_factory=list)
 
     @classmethod
-    def from_dict(cls, data: dict | None) -> "Options":
+    def from_dict(cls, data: dict | None) -> Options:
         data = data or {}
         opts = cls()
         for key, value in data.items():
@@ -153,7 +153,7 @@ class Knowledge:
         return n in self.excluded or n in self.whitelist or norm_digits(value) in self.excluded
 
     # ---------------------------------------------------------------- compilación
-    def compile(self) -> "Knowledge":
+    def compile(self) -> Knowledge:
         groups: dict[bool, list[Literal]] = {False: [], True: []}
         self.text_lookup, self.digit_lookup = {}, {}
         for lit in self.literals.values():
@@ -165,7 +165,7 @@ class Knowledge:
             if not lits:
                 return None
             sources = []
-            for lit in sorted(lits, key=lambda l: len(l.value), reverse=True):
+            for lit in sorted(lits, key=lambda item: len(item.value), reverse=True):
                 if lit.source not in sources:
                     sources.append(lit.source)
             return re.compile(rf"(?<![\w])(?:{'|'.join(sources)})(?![\w])", re.IGNORECASE)
@@ -335,7 +335,8 @@ def _extract_labeled(knowledge: Knowledge, text: str, opts: Options) -> None:
     regex, active = rules.combined_rules(bool(opts.anonymize_professionals),
                                          bool(opts.anonymize_addresses))
     for m in regex.finditer(lowered):
-        rule = active[int(m.lastgroup[1:])]
+        group = m.lastgroup or "r0"  # siempre hay un grupo con nombre (r0, r1, ...)
+        rule = active[int(group[1:])]
         line_end = text.find("\n", m.end())
         line_end = length if line_end < 0 else line_end
         rest = text[m.end():line_end]
@@ -442,7 +443,7 @@ class Redactor:
         self.opts = opts
         self.lang = lang if lang in PLACEHOLDERS else "es"
         self.countries = identifiers.resolver_region(opts.region)
-        self.numbers: dict[str, int] = {}
+        self.numbers: dict[tuple[str, str], int] = {}
         self.per_category: dict[str, int] = {}
         self.report: dict[str, dict] = {}
 

@@ -1,0 +1,14 @@
+MERCY GENERAL HOSPITAL
+DISCHARGE SUMMARY
+Patient Name: O'Brien, Thomas J.    MRN: 00731942    DOB: July 4, 1955
+Address: 2210 Cedar Lane, Apt 4B, Columbus, OH 43215
+Phone: (614) 555-0182    SSN: 219-09-9999    Email: tobrien55@example.com
+Emergency Contact: Margaret O'Brien
+Attending Physician: Dr. Aisha Rahman, MD
+Admission Date: 10/01/2025   Discharge Date: 10/05/2025
+
+HOSPITAL COURSE
+Mr. O'Brien is a 70 y/o male admitted for CHF exacerbation. Thomas tolerated diuresis.
+BNP 1450 pg/mL, creatinine 1.4 mg/dL, K 4.1 mmol/L. Rose 2 kg weight loss noted.
+Follow up with Aisha Rahman, MD in 1 week. Server log ref 10.0.12.7.
+Electronically signed by: Aisha Rahman, MD on 10/05/2025 16:05

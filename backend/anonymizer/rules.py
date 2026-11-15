@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import re
-from functools import lru_cache
 from dataclasses import dataclass
+from functools import lru_cache
 
 # --------------------------------------------------------------------------- utilidades
 
@@ -261,7 +261,8 @@ DATE_PATTERNS = [
     re.compile(rf"\b\d{{1,2}}\s+de\s+(?:{MONTHS_ES})(?:\s+(?:de|del)\s+\d{{4}})?\b", re.IGNORECASE),
     re.compile(rf"\b(?:{MONTHS_ES})\s+(?:de|del)\s+\d{{4}}\b", re.IGNORECASE),
     re.compile(rf"\b(?:{MONTHS_EN}|{MONTHS_ABBR})\.?\s+\d{{1,2}}(?:st|nd|rd|th)?,?\s+\d{{4}}\b", re.IGNORECASE),
-    re.compile(rf"\b\d{{1,2}}(?:st|nd|rd|th)?[\s\-/](?:{MONTHS_EN}|{MONTHS_ES}|{MONTHS_ABBR})\.?[\s\-/,]+\d{{2,4}}\b", re.IGNORECASE),
+    re.compile(rf"\b\d{{1,2}}(?:st|nd|rd|th)?[\s\-/](?:{MONTHS_EN}|{MONTHS_ES}|{MONTHS_ABBR})\.?"
+               rf"[\s\-/,]+\d{{2,4}}\b", re.IGNORECASE),
 ]
 
 EMAIL_RE = re.compile(r"(?<![\w.+-])[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
@@ -299,7 +300,8 @@ ADDRESS_PATTERNS = [
 ]
 
 _NAME_PIECE = rf"[{UPPER}][{LETTER}'’\-]+"
-_NAME_SEQ = rf"{_NAME_PIECE}(?:[ \t]+(?:(?:de|del|la|las|los|van|von|da|di)[ \t]+)?(?:{_NAME_PIECE}|[{UPPER}]\.)){{0,4}}"
+_PARTICLE = r"(?:de|del|la|las|los|van|von|da|di)"
+_NAME_SEQ = rf"{_NAME_PIECE}(?:[ \t]+(?:{_PARTICLE}[ \t]+)?(?:{_NAME_PIECE}|[{UPPER}]\.)){{0,4}}"
 
 PROFESSIONAL_PATTERNS = [
     re.compile(rf"(?<![\w])(?:Dr|Dra|Dres|Prof|Lic|Enf|Klgo|Klga|E\.U|T\.M|Mg|Ps|Nut)\.[ \t]*(?P<name>{_NAME_SEQ})"),
@@ -310,5 +312,6 @@ PROFESSIONAL_PATTERNS = [
 PERSON_PATTERNS = [
     re.compile(rf"(?<![\w])(?:Sr|Sra|Srta|Sres|Mr|Mrs|Ms|Mx)\.?[ \t]+(?P<name>{_NAME_SEQ})"),
     re.compile(rf"(?<![\w])(?:Don|Doña|Miss|Señora?)[ \t]+(?P<name>{_NAME_SEQ})"),
-    re.compile(rf"(?<![\w])(?:[Pp]aciente\s+de\s+nombre|[Pp]atient\s+named|[Ss]e\s+llama|[Ll]lamad[oa])[ \t]+(?P<name>{_NAME_SEQ})"),
+    re.compile(rf"(?<![\w])(?:[Pp]aciente\s+de\s+nombre|[Pp]atient\s+named|[Ss]e\s+llama|[Ll]lamad[oa])"
+               rf"[ \t]+(?P<name>{_NAME_SEQ})"),
 ]

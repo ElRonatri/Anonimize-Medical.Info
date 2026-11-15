@@ -72,4 +72,4 @@ def detect_language(text: str, default: str = "es") -> str:
                 counts[lang] += 1
     if counts["es"] == counts["en"]:
         return default
-    return max(counts, key=counts.get)
+    return max(counts, key=lambda lang: counts[lang])

@@ -20,3 +20,10 @@ samples/
 # Sistema
 .DS_Store
 Thumbs.db
+
+# Herramientas de calidad
+.coverage
+coverage.xml
+htmlcov/
+.mypy_cache/
+.ruff_cache/

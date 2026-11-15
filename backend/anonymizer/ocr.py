@@ -16,7 +16,9 @@ import os
 import shutil
 import sys
 import threading
+from collections.abc import Iterable
 from pathlib import Path
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -26,7 +28,7 @@ ENGINES = (TESSERACT, RAPIDOCR)
 
 _lock = threading.Lock()
 _rapid_engine = None
-_cache: dict[str, object] = {}
+_cache: dict[str, Any] = {}
 
 _WINDOWS_PATHS = (
     r"C:\Program Files\Tesseract-OCR\tesseract.exe",
@@ -38,7 +40,7 @@ _WINDOWS_PATHS = (
 def _app_dirs() -> list[Path]:
     dirs = []
     if getattr(sys, "_MEIPASS", None):
-        dirs.append(Path(sys._MEIPASS))
+        dirs.append(Path(sys._MEIPASS))  # type: ignore[attr-defined]  # sólo en PyInstaller
     dirs.append(Path(sys.executable).resolve().parent)
     dirs.append(Path(__file__).resolve().parents[2])  # raíz del proyecto en desarrollo
     return dirs
@@ -90,7 +92,7 @@ def available_engines() -> list[str]:
         if _rapidocr_ready():
             engines.append(RAPIDOCR)
         _cache["engines"] = engines
-    return list(_cache["engines"])  # type: ignore[arg-type]
+    return list(_cache["engines"])
 
 
 def available() -> bool:
@@ -172,9 +174,10 @@ def _ocr_rapid(pdf_page, resolution: int = 200) -> list[str]:
     result = _get_rapid()(np.array(image))
 
     items: list[tuple[float, float, float, str]] = []  # (y_centro, x, alto, texto)
+    pairs: Iterable[tuple[Any, Any]]
     if hasattr(result, "boxes"):  # rapidocr >= 2
         boxes = result.boxes if result.boxes is not None else []
-        pairs = zip(boxes, result.txts or [])
+        pairs = zip(boxes, result.txts or [], strict=False)
     else:  # rapidocr_onnxruntime: (lista, tiempos)
         raw = result[0] if isinstance(result, tuple) else result
         pairs = ((r[0], r[1]) for r in (raw or []))

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from typing import Callable
+from collections.abc import Callable
 
 from .document import Block, Document, Page
 from .lang import NO_TEXT_PAGE, PAGE_LABEL
@@ -100,7 +100,7 @@ def _split_on_labels(segment: str) -> list[str]:
     if not cuts:
         return [segment]
     bounds = [0] + cuts + [len(segment)]
-    pieces = [segment[a:b].strip().rstrip(" -–,;").strip() for a, b in zip(bounds, bounds[1:])]
+    pieces = [segment[a:b].strip().rstrip(" -–,;").strip() for a, b in zip(bounds, bounds[1:], strict=False)]
     return [p for p in pieces if p]
 
 

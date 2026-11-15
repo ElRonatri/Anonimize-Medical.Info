@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import io
-import re
 import logging
+import re
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
-from .document import Block, Document, Page
 from . import ocr
+from .document import Block, Document, Page
 
 log = logging.getLogger(__name__)
 
@@ -199,7 +199,7 @@ def _lines_from_words(page) -> list[tuple[float, str]]:
     for line_words in lines:
         line_words.sort(key=lambda w: w["x0"])
         parts = [line_words[0]["text"]]
-        for prev, cur in zip(line_words, line_words[1:]):
+        for prev, cur in zip(line_words, line_words[1:], strict=False):
             char_w = max((prev["x1"] - prev["x0"]) / max(len(prev["text"]), 1), 2.0)
             gap = cur["x0"] - prev["x1"]
             parts.append("   " if gap > WIDE_GAP_FACTOR * char_w else " ")

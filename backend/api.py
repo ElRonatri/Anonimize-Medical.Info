@@ -16,8 +16,8 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from anonymizer import ExtractionError, anonymize_document, load_bytes, load_text
-from anonymizer import __version__, identifiers, ocr
+from anonymizer import ExtractionError, __version__, anonymize_document, identifiers, load_bytes, load_text, ocr
+from anonymizer.document import Document
 from anonymizer.exporters import FORMATS, export_bytes
 
 log = logging.getLogger(__name__)
@@ -42,7 +42,7 @@ def _error(code: str, detail: str = "") -> dict:
 _UNSAFE_NAME_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f]+')
 
 
-def safe_stem(name: str, fallback: str = "documento") -> str:
+def safe_stem(name: str | None, fallback: str = "documento") -> str:
     stem = Path(name or "").stem
     stem = _UNSAFE_NAME_RE.sub("_", stem).strip(" ._")
     return stem[:120] or fallback
@@ -54,7 +54,7 @@ class Item:
     name: str
     path: str | None = None
     data: bytes | None = None
-    doc: object | None = None
+    doc: Document | None = None
     status: str = "queued"  # queued | processing | done | error | cancelled
     stage: str = ""  # text | ocr | anonymize
     page: int = 0
@@ -358,7 +358,8 @@ class Api:
             return _error("unsupported_format", fmt)
         folder_path = Path(folder)
         _, ext = FORMATS[fmt]
-        written, used = [], set()
+        written: list[str] = []
+        used: set[str] = set()
         for index, document in enumerate(documents or [], start=1):
             # Los nombres originales suelen incluir el nombre del paciente: opción genérica.
             stem = f"documento_{index:02d}" if generic_names else safe_stem(document.get("name"))
