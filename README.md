@@ -15,16 +15,18 @@ epicrisis, informes, etc.), **anonimiza los datos del paciente** y devuelve el r
 
 | | |
 |---|---|
-| Entrada | PDF (arrastrar y soltar o diálogo nativo), TXT, o texto pegado |
-| Salida | Markdown (títulos, listas, tablas de laboratorio) o texto plano; copiar o guardar `.md`/`.txt` |
+| Entrada | **varios PDF a la vez** (arrastrar y soltar o diálogo nativo), TXT, o texto pegado. Se procesan en cola en un hilo secundario, con avance por archivo y por página |
+| Salida | Markdown (títulos, listas, tablas de laboratorio) o texto plano; copiar o **exportar a `.md`, `.txt`, Word `.docx` o `.json`**, un documento o todos a una carpeta (con nombres genéricos opcionales) |
 | Datos detectados | nombre del paciente, familiares y contactos, RUT/RUN, DNI, NIE, CURP, cédula, SSN, pasaporte, N° de ficha / historia clínica / MRN, fecha de nacimiento, teléfonos, correos, direcciones y localidades, URLs, IPs |
-| Opcional | nombres de profesionales (médicos, firmantes), todas las fechas, términos personalizados |
+| Opcional | nombres de profesionales (médicos, firmantes), todas las fechas, términos personalizados a ocultar |
+| Excepciones | lista de términos que **nunca** se anonimizan (instituciones, fármacos, palabras ocultadas por error) |
 | Por país (opcional) | selector de región/país: formatos validados con dígito verificador (RUN/RUT, CUIL, CPF, CNS, CURP, RFC, CI de Venezuela/Uruguay/Ecuador, SSN, MBI, SIN, DNI/NIE, NIR, Codice Fiscale, NINO, NHS, personnummer, HETU, AHV, Aadhaar, PAN, ID china, RRN, NRIC, HKID, CNIC, Emirates ID), pasaportes MRZ y más de 150 palabras clave de documentos de todo el mundo |
 | Números largos (opcional) | oculta cualquier secuencia de 7+ dígitos, respetando fechas |
 | Marcadores | numerados y consistentes (`[PACIENTE_1]`, `[PERSONA_2]`) o genéricos (`[PACIENTE]`) |
 | Revisión | lista de datos detectados (valores originales ocultos por defecto); marca falsos positivos para no anonimizarlos; edición manual del resultado |
 | Limpieza | elimina encabezados/pies de página repetidos y números de página |
-| OCR | opcional, para PDFs escaneados (RapidOCR + ONNX, sin conexión) |
+| OCR | PDFs escaneados o basados en imágenes, 100% sin conexión: **Tesseract** (vía `pytesseract`, español + inglés) o **RapidOCR** (ONNX). Modo automático (sólo páginas escaneadas), todas las páginas o desactivado |
+| Rendimiento | expresiones regulares precompiladas y combinadas; ~2 ms para una epicrisis de 2 páginas, ~1 s para 1,3 millones de caracteres (≈400 páginas densas) |
 
 ### Cómo detecta los datos
 
@@ -53,12 +55,22 @@ epicrisis, informes, etc.), **anonimiza los datos del paciente** y devuelve el r
 ## Generar el ejecutable
 
 ```bat
-build.bat          :: sin OCR
-build.bat --ocr    :: incluye OCR para PDFs escaneados (~100 MB más)
+build.bat                :: base (usa Tesseract si está instalado en el equipo)
+build.bat --ocr          :: incluye el motor RapidOCR dentro del ejecutable (~100 MB más)
+build.bat --tesseract    :: copia Tesseract instalado dentro del ejecutable (portable)
 ```
 
 El resultado queda en `dist\AnonimizeMedical\AnonimizeMedical.exe` (carpeta portable: puedes
 comprimirla y copiarla a otro equipo).
+
+### OCR con Tesseract en Windows
+
+1. Instala Tesseract desde [UB Mannheim](https://github.com/UB-Mannheim/tesseract/wiki) y marca los
+   idiomas **Spanish** e **English** durante la instalación.
+2. La aplicación lo detecta sola en `C:\Program Files\Tesseract-OCR` (o en `TESSERACT_CMD` / el `PATH`).
+3. Para distribuir el ejecutable a equipos sin Tesseract, compila con `build.bat --tesseract`.
+
+Si no hay ningún motor OCR, las páginas escaneadas se marcan como «sin texto extraíble».
 
 ## Ejecutar desde el código fuente
 
@@ -93,9 +105,11 @@ python scripts\make_samples.py samples   :: genera PDFs de ejemplo con datos fic
 ```
 backend/
   main.py               ventana PyWebView
-  api.py                API expuesta a JavaScript (window.pywebview.api)
+  api.py                API para JavaScript (window.pywebview.api): cola de lotes en hilo secundario
   anonymizer/
-    extract.py          PDF/TXT -> líneas y tablas (pdfplumber), OCR opcional
+    extract.py          PDF/TXT -> líneas y tablas (pdfplumber), OCR por página con progreso
+    ocr.py              motores OCR locales (Tesseract / RapidOCR)
+    exporters.py        exportación a Markdown, texto, Word (.docx) y JSON
     rules.py            etiquetas ES/EN y patrones de identificadores
     identifiers.py      documentos por país (validadores, palabras clave, capa agresiva)
     detector.py         detección, propagación de nombres y reemplazo
@@ -122,4 +136,6 @@ build.bat / run.bat / run-dev.bat
 Windows desktop app (Python + React/Tailwind via PyWebView) that reads medical documents (PDF/TXT),
 de-identifies patient data (names, IDs, record numbers, birth dates, contact info, addresses) in
 Spanish and English documents, and returns Markdown or plain text ready to copy. Everything runs
-locally. Build with `build.bat` (add `--ocr` for scanned PDFs). Always review the output before sharing.
+locally. Supports batch processing, offline OCR (Tesseract or RapidOCR), export to Markdown, text, Word and
+JSON, and an exceptions list. Build with `build.bat` (`--ocr` / `--tesseract` to bundle OCR). Always review
+the output before sharing.

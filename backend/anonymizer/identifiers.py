@@ -28,8 +28,12 @@ B = r"(?<![A-Za-z0-9])"
 E = r"(?![A-Za-z0-9])"
 
 
+_NO_DIGITOS = re.compile(r"\D")
+_NO_ALNUM_MAYUS = re.compile(r"[^A-Z0-9]+")
+
+
 def _digits(s: str) -> str:
-    return re.sub(r"\D", "", s)
+    return _NO_DIGITOS.sub("", s)
 
 
 # ----------------------------------------------------------------------------
@@ -412,10 +416,27 @@ _VALOR = r"[A-Za-z0-9](?:[A-Za-z0-9]|[./-](?=[A-Za-z0-9])|[ \t](?=\d)){3,24}"
 
 _kw_ci = "|".join(sorted(KW_CI, key=len, reverse=True))
 _kw_cs = "|".join(sorted(KW_CS, key=len, reverse=True))
-CONTEXTUAL = re.compile(
+# Se aplica sobre el texto completo: los espacios nunca cruzan saltos de línea.
+CONTEXTUAL = re.compile((
     B + r"(?P<kw>(?i:" + _kw_ci + r")|(?:" + _kw_cs + r"))\.?" + E + _SEP
     + r"(?P<valor>" + _VALOR + r")" + r"(?![A-Za-z0-9])"
-)
+).replace(r"\s", r"[ \t]"))
+
+
+def _contextual(kw: str, primera: str) -> re.Pattern:
+    # La anticipación del primer carácter permite descartar rápido las posiciones imposibles.
+    return re.compile((
+        f"(?={primera})" + B + r"(?P<kw>" + kw + r")\.?" + E + _SEP
+        + r"(?P<valor>" + _VALOR + r")" + r"(?![A-Za-z0-9])"
+    ).replace(r"\s", r"[ \t]"))
+
+
+# Palabras clave insensibles a mayúsculas: se buscan en minúsculas sobre el texto en minúsculas
+# (sin IGNORECASE, ≈2x más rápido). Las siglas sensibles, sobre el texto original.
+CONTEXTUAL_CI = _contextual(_kw_ci, "[a-z]")
+CONTEXTUAL_CS = _contextual(_kw_cs, "[A-Z]")
+_MINUSCULAS = {c: c + 32 for c in range(ord("A"), ord("Z") + 1)}
+_MINUSCULAS.update({c: c + 32 for c in range(0xC0, 0xDF) if c != 0xD7})
 
 _ETIQUETA_KW = [
     (r"pas|ppn|reisepass|mrz", "PASAPORTE"),
@@ -424,12 +445,15 @@ _ETIQUETA_KW = [
 ]
 
 
+_ETIQUETA_KW_RE = [(re.compile(patron), etiqueta) for patron, etiqueta in _ETIQUETA_KW]
+
+
 def _etiqueta_contextual(kw: str) -> str:
     k = kw.strip().lower()
-    for patron, etiqueta in _ETIQUETA_KW:
-        if re.search(patron, k):
+    for patron, etiqueta in _ETIQUETA_KW_RE:
+        if patron.search(k):
             return etiqueta
-    return "ID_" + re.sub(r"[^A-Z0-9]+", "_", kw.strip().upper()).strip("_")[:20]
+    return "ID_" + _NO_ALNUM_MAYUS.sub("_", kw.strip().upper()).strip("_")[:20]
 
 
 # ----------------------------------------------------------------------------
@@ -453,7 +477,43 @@ class Hallazgo:
     capa: str  # "estructural" | "contextual" | "agresiva"
 
 
-_COMPILADOS = [(p, re.compile(p.regex, p.flags)) for p in ESTRUCTURALES]
+def _primer_caracter(cuerpo: str) -> Optional[str]:
+    """Clase del primer carácter de un patrón (para una anticipación rápida), o None."""
+    while cuerpo.startswith("(?!"):  # saltar anticipaciones negativas iniciales
+        nivel, i = 0, 0
+        for i, c in enumerate(cuerpo):
+            if c == "(" and (i == 0 or cuerpo[i - 1] != "\\"):
+                nivel += 1
+            elif c == ")" and cuerpo[i - 1] != "\\":
+                nivel -= 1
+                if nivel == 0:
+                    break
+        cuerpo = cuerpo[i + 1:]
+    if cuerpo.startswith(r"\d"):
+        return r"\d"
+    if cuerpo.startswith("["):
+        fin = cuerpo.find("]", 1)
+        return cuerpo[:fin + 1] if fin > 0 else None
+    if cuerpo[:1].isalnum():
+        return re.escape(cuerpo[0])
+    return None
+
+
+def _compilar(p: Patron) -> re.Pattern:
+    """Precompila el patrón anteponiendo una anticipación del primer carácter.
+
+    Las expresiones empiezan con un lookbehind, lo que impide al motor descartar
+    rápido las posiciones imposibles; la anticipación (?=[...]) lo vuelve ~3x más rápido.
+    """
+    regex = p.regex
+    if regex.startswith(B) and "|" + B not in regex:
+        primero = _primer_caracter(regex[len(B):])
+        if primero:
+            regex = f"(?={primero})" + regex
+    return re.compile(regex, p.flags)
+
+
+_COMPILADOS = [(p, _compilar(p)) for p in ESTRUCTURALES]
 
 
 def estructurales(texto: str, paises: Optional[frozenset[str]] = frozenset(),
@@ -473,13 +533,18 @@ def estructurales(texto: str, paises: Optional[frozenset[str]] = frozenset(),
 
 def contextuales(texto: str) -> list[Hallazgo]:
     hallazgos = []
-    for m in CONTEXTUAL.finditer(texto):
-        valor = m.group("valor").rstrip(".-/ ")
+    minusculas = texto.lower()
+    if len(minusculas) != len(texto):  # algunos caracteres Unicode cambian de longitud
+        minusculas = texto.translate(_MINUSCULAS)
+    coincidencias = [(m, texto) for m in CONTEXTUAL_CI.finditer(minusculas)]
+    coincidencias += [(m, texto) for m in CONTEXTUAL_CS.finditer(texto)]
+    for m, _ in coincidencias:
+        valor = texto[m.start("valor"):m.end("valor")].rstrip(".-/ ")
         if sum(c.isdigit() for c in valor) < 4 or _FECHA.match(valor):
             continue
         ini = m.start("valor")
-        hallazgos.append(Hallazgo(ini, ini + len(valor), valor,
-                                  _etiqueta_contextual(m.group("kw")), "contextual"))
+        kw = texto[m.start("kw"):m.end("kw")]
+        hallazgos.append(Hallazgo(ini, ini + len(valor), valor, _etiqueta_contextual(kw), "contextual"))
     return hallazgos
 
 

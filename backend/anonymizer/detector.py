@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import functools
 import re
 import unicodedata
 from dataclasses import dataclass, field
+from functools import lru_cache
 
 from . import identifiers, rules
 from .lang import PLACEHOLDERS
@@ -19,16 +21,28 @@ DIGIT_KINDS = {"ID", "RECORD", "PHONE"}
 
 # --------------------------------------------------------------------------- normalización
 
+_NON_ALNUM_RE = re.compile(r"[^0-9a-z]")
+_SEP_CLASS_RE = re.compile(r"[/.\-]")
+
+
+@lru_cache(maxsize=65536)
 def strip_accents(text: str) -> str:
     return "".join(c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c))
 
 
+@lru_cache(maxsize=65536)
 def norm(text: str) -> str:
     return " ".join(strip_accents(text).lower().split())
 
 
+@lru_cache(maxsize=65536)
 def norm_digits(text: str) -> str:
-    return re.sub(r"[^0-9a-z]", "", strip_accents(text).lower())
+    return _NON_ALNUM_RE.sub("", strip_accents(text).lower())
+
+
+def lookup_key(text: str) -> str:
+    """Forma canónica para identificar a qué literal corresponde una coincidencia."""
+    return _SEP_CLASS_RE.sub("/", norm(text.replace(",", " ")))
 
 
 _EQUIV = {"a": "aáàäâ", "e": "eéèëê", "i": "iíìïî", "o": "oóòöô", "u": "uúùüû",
@@ -56,6 +70,15 @@ def fuzzy_digits_pattern(value: str) -> str:
     return r"[\s.\-/()]?".join(re.escape(c) for c in chars)
 
 
+def compile_terms(terms) -> re.Pattern | None:
+    """Una sola regex precompilada (insensible a tildes/mayúsculas) para una lista de términos."""
+    terms = sorted({t for t in terms if t and t.strip()}, key=len, reverse=True)
+    if not terms:
+        return None
+    alternatives = "|".join(fuzzy_text_pattern(t) for t in terms)
+    return re.compile(rf"(?<![\w])(?:{alternatives})(?![\w])", re.IGNORECASE)
+
+
 # --------------------------------------------------------------------------- opciones
 
 @dataclass
@@ -71,6 +94,7 @@ class Options:
     region: str = "general"  # general | all | latam | europe | ... | código ISO de país
     aggressive_numbers: bool = False  # ocultar cualquier secuencia de >= 7 dígitos
     custom_terms: list[str] = field(default_factory=list)
+    whitelist: list[str] = field(default_factory=list)  # términos que nunca se anonimizan
     exclude: list[str] = field(default_factory=list)
 
     @classmethod
@@ -81,6 +105,7 @@ class Options:
             if hasattr(opts, key) and value is not None:
                 setattr(opts, key, value)
         opts.custom_terms = [t.strip() for t in (opts.custom_terms or []) if t and t.strip()]
+        opts.whitelist = [t.strip() for t in (opts.whitelist or []) if t and t.strip()]
         opts.exclude = [t for t in (opts.exclude or []) if t]
         return opts
 
@@ -92,45 +117,93 @@ class Literal:
     category: str
     key: str
     value: str
-    pattern: re.Pattern
+    source: str  # fragmento regex (sin límites) que reconoce el valor
+    digits: bool = False  # identificador numérico: se compara sin separadores
     name_token: bool = False  # exige mayúscula inicial en la coincidencia
     label: str | None = None  # marcador específico (p. ej. RUN_CL, PASAPORTE)
 
+    @property
+    def lookup(self) -> str:
+        return norm_digits(self.value) if self.digits else lookup_key(self.value)
+
 
 class Knowledge:
-    """Valores concretos detectados en el documento (nombres, IDs, fechas...)."""
+    """Valores concretos detectados en el documento (nombres, IDs, fechas...).
 
-    def __init__(self, excluded: set[str]):
+    Todos los literales se combinan en DOS expresiones regulares precompiladas (texto y
+    dígitos), de modo que cada línea se recorre una sola vez sin importar cuántos
+    valores se hayan detectado.
+    """
+
+    def __init__(self, excluded: set[str], whitelist: list[str] | None = None):
         self.excluded = excluded
+        self.whitelist = {norm(t) for t in (whitelist or [])}
+        self.whitelist_re = compile_terms(whitelist or [])
         self.literals: dict[tuple[str, bool], Literal] = {}
         self.token_keys: dict[str, tuple[str, str]] = {}  # token normalizado -> (cat, key)
         self.name_keys: dict[str, tuple[str, set[str]]] = {}  # key -> (cat, tokens)
         self._counter = 0
+        self.text_re: re.Pattern | None = None
+        self.digit_re: re.Pattern | None = None
+        self.text_lookup: dict[str, list[Literal]] = {}
+        self.digit_lookup: dict[str, list[Literal]] = {}
 
     def is_excluded(self, value: str) -> bool:
-        return norm(value) in self.excluded or norm_digits(value) in self.excluded
+        n = norm(value)
+        return n in self.excluded or n in self.whitelist or norm_digits(value) in self.excluded
+
+    # ---------------------------------------------------------------- compilación
+    def compile(self) -> "Knowledge":
+        groups: dict[bool, list[Literal]] = {False: [], True: []}
+        self.text_lookup, self.digit_lookup = {}, {}
+        for lit in self.literals.values():
+            groups[lit.digits].append(lit)
+            table = self.digit_lookup if lit.digits else self.text_lookup
+            table.setdefault(lit.lookup, []).append(lit)
+
+        def build(lits: list[Literal]) -> re.Pattern | None:
+            if not lits:
+                return None
+            sources = []
+            for lit in sorted(lits, key=lambda l: len(l.value), reverse=True):
+                if lit.source not in sources:
+                    sources.append(lit.source)
+            return re.compile(rf"(?<![\w])(?:{'|'.join(sources)})(?![\w])", re.IGNORECASE)
+
+        self.text_re = build(groups[False])
+        self.digit_re = build(groups[True])
+        return self
+
+    def _store(self, slot: tuple[str, bool], literal: Literal) -> None:
+        self.literals[slot] = literal
 
     # ---------------------------------------------------------------- valores simples
     def add_value(self, category: str, value: str, label: str | None = None) -> None:
         value = value.strip(" .,;:-|")
         if len(value) < 3 or self.is_excluded(value):
             return
-        if category in DIGIT_KINDS:
+        digits = category in DIGIT_KINDS
+        if digits:
             canon = norm_digits(value)
             if sum(c.isdigit() for c in canon) < 3:
                 return
-            pattern = fuzzy_digits_pattern(value)
+            source = fuzzy_digits_pattern(value)
             key = f"{category}:{canon}"
         else:
-            pattern = fuzzy_text_pattern(value)
+            source = fuzzy_text_pattern(value)
             key = f"{category}:{norm(value)}"
         existing = self.literals.get((key, False))
         if existing is not None:
             if label and not existing.label:
                 existing.label = label
             return
-        regex = re.compile(rf"(?<![\w]){pattern}(?![\w])", re.IGNORECASE)
-        self.literals[(key, False)] = Literal(category, key, value, regex, label=label)
+        self._store((key, False), Literal(category, key, value, source, digits=digits, label=label))
+
+    def add_custom(self, term: str) -> None:
+        if self.is_excluded(term):
+            return
+        key = f"CUSTOM:{norm(term)}"
+        self._store((key, False), Literal("CUSTOM", key, term, fuzzy_text_pattern(term)))
 
     # ---------------------------------------------------------------- nombres
     def add_name(self, category: str, raw: str) -> None:
@@ -140,7 +213,7 @@ class Knowledge:
         full = " ".join(tokens)
         if self.is_excluded(full):
             return
-        significant = [t for t in tokens if _significant(t)]
+        significant = [t for t in tokens if _significant(t) and not self.is_excluded(t)]
         if not significant:
             return
         sig_norm = {norm(t) for t in significant}
@@ -164,20 +237,19 @@ class Knowledge:
 
         # Nombre completo como literal (prioridad por longitud)
         if len(tokens) > 1:
-            lit_key = (f"{key}|{norm(full)}", True)
-            if lit_key not in self.literals:
-                regex = re.compile(rf"(?<![\w]){fuzzy_text_pattern(full, r',?\s+')}(?![\w])",
-                                   re.IGNORECASE)
-                self.literals[lit_key] = Literal(category, key, full, regex, name_token=True)
+            slot = (f"{key}|{norm(full)}", True)
+            if slot not in self.literals:
+                self._store(slot, Literal(category, key, full, fuzzy_text_pattern(full, r",?\s+"),
+                                          name_token=True))
 
         # Cada apellido/nombre por separado (propagación)
         for token in significant:
             t_norm = norm(token)
-            if t_norm in self.token_keys or self.is_excluded(token):
+            if t_norm in self.token_keys:
                 continue
             self.token_keys[t_norm] = (category, key)
-            regex = re.compile(rf"(?<![\w]){fuzzy_text_pattern(token)}(?![\w])", re.IGNORECASE)
-            self.literals[(f"{key}|{t_norm}", True)] = Literal(category, key, token, regex, name_token=True)
+            self._store((f"{key}|{t_norm}", True),
+                        Literal(category, key, token, fuzzy_text_pattern(token), name_token=True))
 
 
 def _significant(token: str) -> bool:
@@ -253,19 +325,26 @@ def _match_date(value: str) -> str | None:
 
 
 def _extract_labeled(knowledge: Knowledge, text: str, opts: Options) -> None:
-    lines = text.split("\n")
-    for index, line in enumerate(lines):
-        for rule, regex in rules.COMPILED_RULES:
-            if rule.category == "PROFESSIONAL" and not opts.anonymize_professionals:
-                continue
-            if rule.category == "ADDRESS" and not opts.anonymize_addresses:
-                continue
-            for m in regex.finditer(line):
-                value = _cut_value(line[m.end():])
-                if not value and index + 1 < len(lines) and line[m.end():].strip() == "":
-                    value = _cut_value(lines[index + 1])
-                if value:
-                    _register_value(knowledge, rule, value)
+    """Una sola pasada (regex combinada y precompilada) sobre el texto completo en minúsculas.
+
+    Las reglas no cruzan saltos de línea; si la etiqueta queda sola al final de la línea
+    ("Nombre:" + salto), el valor se toma de la línea siguiente.
+    """
+    length = len(text)
+    lowered = rules.lower_same_length(text)
+    regex, active = rules.combined_rules(bool(opts.anonymize_professionals),
+                                         bool(opts.anonymize_addresses))
+    for m in regex.finditer(lowered):
+        rule = active[int(m.lastgroup[1:])]
+        line_end = text.find("\n", m.end())
+        line_end = length if line_end < 0 else line_end
+        rest = text[m.end():line_end]
+        value = _cut_value(rest)
+        if not value and not rest.strip() and line_end < length:
+            next_end = text.find("\n", line_end + 1)
+            value = _cut_value(text[line_end + 1: length if next_end < 0 else next_end])
+        if value:
+            _register_value(knowledge, rule, value)
 
 
 def _register_value(knowledge: Knowledge, rule: rules.LabelRule, value: str) -> None:
@@ -299,7 +378,7 @@ def _register_value(knowledge: Knowledge, rule: rules.LabelRule, value: str) -> 
 
 def build_knowledge(text: str, opts: Options) -> Knowledge:
     excluded = {norm(v) for v in opts.exclude} | {norm_digits(v) for v in opts.exclude if norm_digits(v)}
-    knowledge = Knowledge(excluded)
+    knowledge = Knowledge(excluded, opts.whitelist)
 
     _extract_labeled(knowledge, text, opts)
 
@@ -312,17 +391,13 @@ def build_knowledge(text: str, opts: Options) -> Knowledge:
             knowledge.add_name("PERSON", m.group("name"))
 
     if identifiers.resolver_region(opts.region) is not None:
-        for line in text.split("\n"):
-            for hit in identifiers.contextuales(line):
-                category, label = _identifier_category(hit.etiqueta)
-                knowledge.add_value(category, hit.texto, label)
+        for hit in identifiers.contextuales(text):
+            category, label = _identifier_category(hit.etiqueta)
+            knowledge.add_value(category, hit.texto, label)
 
     for term in opts.custom_terms:
-        if not knowledge.is_excluded(term):
-            key = f"CUSTOM:{norm(term)}"
-            regex = re.compile(rf"(?<![\w]){fuzzy_text_pattern(term)}(?![\w])", re.IGNORECASE)
-            knowledge.literals[(key, False)] = Literal("CUSTOM", key, term, regex)
-    return knowledge
+        knowledge.add_custom(term)
+    return knowledge.compile()
 
 
 def _identifier_category(etiqueta: str) -> tuple[str, str | None]:
@@ -355,6 +430,9 @@ class Span:
         return self.end - self.start
 
 
+_DIGIT_RE = re.compile(r"\d")
+_URL_HINT_RE = re.compile(r"www\.|https?://", re.IGNORECASE)
+
 _JOINABLE_GAP = re.compile(r"^[\s,]*(?:(?:de|del|la|las|los|y|e|van|von|da|di)[\s,]+)*$", re.IGNORECASE)
 
 
@@ -383,32 +461,62 @@ class Redactor:
         return f"[{label}_{self.numbers[number_key]}]"
 
     # ---------------------------------------------------------------- spans
+    def _literal_spans(self, text: str, spans: list[Span]) -> None:
+        kn = self.knowledge
+        for regex, table, keyfn in ((kn.text_re, kn.text_lookup, lookup_key),
+                                    (kn.digit_re, kn.digit_lookup, norm_digits)):
+            if regex is None:
+                continue
+            for m in regex.finditer(text):
+                found = m.group(0)
+                for lit in table.get(keyfn(found), ()):
+                    if lit.name_token and not found[:1].isupper():
+                        continue
+                    spans.append(Span(m.start(), m.end(), lit.category, lit.key, lit.label,
+                                      1 if lit.label else 2))
+                    break
+
     def _find_spans(self, text: str) -> list[Span]:
         spans: list[Span] = []
+        self._literal_spans(text, spans)
+
+        # Filtros rápidos: casi todos los patrones necesitan dígitos, "@" o "www/http".
+        has_digit = _DIGIT_RE.search(text) is not None
+        if "@" in text:
+            self._pattern_spans(text, spans, rules.EMAIL_RE, "EMAIL")
+        if _URL_HINT_RE.search(text):
+            self._pattern_spans(text, spans, rules.URL_RE, "URL")
+        if has_digit:
+            self._digit_spans(text, spans)
+        if (self.countries is not None or self.opts.aggressive_numbers) and \
+                rules.ID_CANDIDATE_RE.search(text):
+            self._identifier_spans(text, spans)
+
+        wl = self.knowledge.whitelist_re
+        if wl is not None and spans:
+            allowed = [(m.start(), m.end()) for m in wl.finditer(text)]
+            if allowed:
+                spans = [s for s in spans if not any(a <= s.start and s.end <= b for a, b in allowed)]
+        return spans
+
+    def _pattern_spans(self, text, spans, regex, category, digits=False):
         excluded = self.knowledge.is_excluded
+        for m in regex.finditer(text):
+            value = m.group(0)
+            if excluded(value):
+                continue
+            key = f"{category}:{norm_digits(value) if digits else norm(value)}"
+            spans.append(Span(m.start(), m.end(), category, key))
 
-        for lit in self.knowledge.literals.values():
-            for m in lit.pattern.finditer(text):
-                if lit.name_token and not m.group(0)[:1].isupper():
-                    continue
-                spans.append(Span(m.start(), m.end(), lit.category, lit.key, lit.label,
-                                  1 if lit.label else 2))
-
-        def add_pattern(regex, category, digits=False):
-            for m in regex.finditer(text):
-                value = m.group(0)
-                if excluded(value):
-                    continue
-                key = f"{category}:{norm_digits(value) if digits else norm(value)}"
-                spans.append(Span(m.start(), m.end(), category, key))
-
-        add_pattern(rules.EMAIL_RE, "EMAIL")
-        add_pattern(rules.URL_RE, "URL")
-        add_pattern(rules.IP_RE, "IP")
-        for regex in rules.ID_PATTERNS:
-            add_pattern(regex, "ID", digits=True)
-        for regex in rules.PHONE_PATTERNS:
-            add_pattern(regex, "PHONE", digits=True)
+    def _digit_spans(self, text: str, spans: list[Span]) -> None:
+        add_pattern = functools.partial(self._pattern_spans, text, spans)
+        if rules.IP_HINT_RE.search(text):
+            add_pattern(rules.IP_RE, "IP")
+        if rules.ID_CANDIDATE_RE.search(text):
+            for regex in rules.ID_PATTERNS:
+                add_pattern(regex, "ID", digits=True)
+            for regex in rules.PHONE_PATTERNS:
+                add_pattern(regex, "PHONE", digits=True)
         if self.opts.anonymize_addresses:
             for regex in rules.ADDRESS_PATTERNS:
                 add_pattern(regex, "ADDRESS")
@@ -416,6 +524,8 @@ class Redactor:
             for regex in rules.DATE_PATTERNS:
                 add_pattern(regex, "DATE")
 
+    def _identifier_spans(self, text: str, spans: list[Span]) -> None:
+        excluded = self.knowledge.is_excluded
         # Identificadores por país (validados con dígito verificador cuando existe).
         hits = identifiers.estructurales(text, self.countries) if self.countries is not None else []
         if self.opts.aggressive_numbers:
@@ -427,7 +537,6 @@ class Redactor:
             rank = 3 if hit.capa == "agresiva" else 0
             spans.append(Span(hit.inicio, hit.fin, category, f"{category}:{norm_digits(hit.texto)}",
                               label, rank))
-        return spans
 
     @staticmethod
     def _resolve(spans: list[Span]) -> list[Span]:

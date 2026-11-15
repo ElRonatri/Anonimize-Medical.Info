@@ -33,6 +33,7 @@ def anonymize_document(doc: Document, options: dict | Options | None = None) -> 
         "detected_language": detected,
         "pages": len(doc.pages),
         "ocr_pages": sum(1 for p in doc.pages if p.ocr),
+        "ocr_engine": doc.ocr_engine,
         "empty_pages": sum(1 for p in doc.pages if p.empty),
         "entities": entities,
         "replacements": sum(e["count"] for e in entities),

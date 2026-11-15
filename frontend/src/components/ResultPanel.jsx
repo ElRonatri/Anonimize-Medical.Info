@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
-import { Check, Copy, Eye, FileCheck2, Loader2, Pencil, Save, ShieldCheck } from 'lucide-react'
+import { Check, Copy, Eye, FileCheck2, Loader2, Pencil, ShieldCheck } from 'lucide-react'
 import { useI18n } from '../i18n.jsx'
 import { categoryClass } from '../categories.js'
 import { Button, Card, cx } from './ui.jsx'
+import ExportMenu from './ExportMenu.jsx'
 
 const PLACEHOLDER_RE = /(\[[A-Z][A-Z_]*\d*\])/g
 
@@ -39,7 +40,20 @@ function Stat({ label, value }) {
   )
 }
 
-export default function ResultPanel({ result, text, onTextChange, edited, loading, onCopy, onSave, copied, saved }) {
+export default function ResultPanel({
+  result,
+  title,
+  text,
+  onTextChange,
+  edited,
+  loading,
+  updating,
+  onCopy,
+  copied,
+  onExport,
+  onExportAll,
+  doneCount,
+}) {
   const { t } = useI18n()
   const [view, setView] = useState('preview')
 
@@ -65,10 +79,7 @@ export default function ResultPanel({ result, text, onTextChange, edited, loadin
           </button>
         ))}
       </div>
-      <Button onClick={onSave}>
-        {saved ? <Check className="h-4 w-4 text-teal-600" /> : <Save className="h-4 w-4" />}
-        {saved ? t('saved') : t('save')}
-      </Button>
+      <ExportMenu onExport={onExport} onExportAll={onExportAll} doneCount={doneCount} />
       <Button variant="primary" onClick={onCopy}>
         {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
         {copied ? t('copied') : t('copy')}
@@ -77,7 +88,18 @@ export default function ResultPanel({ result, text, onTextChange, edited, loadin
   )
 
   return (
-    <Card title={t('resultTitle')} icon={FileCheck2} actions={actions} className="flex min-h-0 flex-1 flex-col">
+    <Card
+      title={
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="shrink-0">{t('resultTitle')}</span>
+          {title && <span className="truncate font-normal text-slate-400">· {title}</span>}
+          {updating && <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-teal-600" aria-label={t('updating')} />}
+        </span>
+      }
+      icon={FileCheck2}
+      actions={actions}
+      className="flex min-h-0 flex-1 flex-col"
+    >
       {result && (
         <div className="flex flex-wrap gap-2 border-b border-slate-100 px-4 py-2.5 dark:border-slate-800">
           <Stat label={t('statPages')} value={result.pages} />
