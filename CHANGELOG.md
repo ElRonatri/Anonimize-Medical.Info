@@ -16,6 +16,11 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 - `CHANGELOG.md` y configuración centralizada en `pyproject.toml`.
 
 ### Cambiado
+- **Rendimiento:** la propagación de nombres, apellidos, términos personalizados e
+  identificadores usa Aho-Corasick (`pyahocorasick`, BSD-3-Clause, ~115 KB) cuando hay 100 o
+  más valores: ×12,9 más rápido con 2 000 pacientes (12,9 s → 1,0 s), sin cambios con pocos
+  valores y con salida idéntica. Si falta la dependencia se usa la regex anterior.
+  Benchmark: `scripts/bench.py`, resultados en `docs/benchmarks.md`.
 - **Privacidad:** el OCR con Tesseract envía la imagen por stdin y lee el texto por stdout, sin
   archivos temporales (antes `pytesseract` escribía la página en `%TEMP%`). Se elimina la
   dependencia `pytesseract`.

@@ -16,12 +16,24 @@ from pathlib import Path
 
 import pytest
 
-from anonymizer import anonymize_document, load_bytes, load_text
+from anonymizer import anonymize_document, detector, fastmatch, load_bytes, load_text
 
 HERE = Path(__file__).resolve().parent
 FIXTURES = HERE / "fixtures"
 GOLDEN = HERE / "golden"
 UPDATE = os.environ.get("UPDATE_GOLDEN") == "1"
+
+# Cada caso se ejecuta con los dos motores de búsqueda de valores: ambos deben producir
+# exactamente el mismo archivo esperado (paridad Aho-Corasick / regex).
+ENGINES = ["regex", "aho"] if fastmatch.AVAILABLE else ["regex"]
+
+
+@pytest.fixture(params=ENGINES, autouse=True)
+def literal_engine(request):
+    previous = detector.literal_engine()
+    detector.set_literal_engine(request.param)
+    yield request.param
+    detector.set_literal_engine(previous)
 
 TEXT_CASES = {
     "es_default": ("es_epicrisis.txt", {}),

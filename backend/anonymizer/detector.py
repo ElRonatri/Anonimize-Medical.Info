@@ -8,7 +8,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from functools import lru_cache
 
-from . import identifiers, rules
+from . import fastmatch, identifiers, rules
 from .lang import PLACEHOLDERS
 
 NAME_CATEGORIES = ("PATIENT", "PERSON", "PROFESSIONAL")
@@ -17,6 +17,28 @@ CATEGORY_PRIORITY = {c: i for i, c in enumerate(
      "PROFESSIONAL", "CUSTOM", "URL", "IP", "DATE"))}
 
 DIGIT_KINDS = {"ID", "RECORD", "PHONE"}
+
+# Motor para buscar los valores ya detectados (nombres, apellidos, términos personalizados e
+# identificadores) en cada línea:
+#   "aho"   Aho-Corasick: una pasada, el costo no crece con la cantidad de valores.
+#   "regex" una expresión con alternativas: más rápida con pocos valores (sin preparación).
+#   "auto"  (por defecto) Aho-Corasick a partir de AHO_MIN_TERMS valores de un mismo tipo.
+_ENGINES = ("auto", "aho", "regex")
+_literal_engine = "auto" if fastmatch.AVAILABLE else "regex"
+AHO_MIN_TERMS = 100  # punto de cruce medido con scripts/bench.py (ver docs/benchmarks.md)
+
+
+def set_literal_engine(engine: str) -> None:
+    global _literal_engine
+    if engine not in _ENGINES:
+        raise ValueError(f"motor desconocido: {engine}")
+    if engine != "regex" and not fastmatch.AVAILABLE:
+        raise RuntimeError("pyahocorasick no está instalado")
+    _literal_engine = engine
+
+
+def literal_engine() -> str:
+    return _literal_engine
 
 
 # --------------------------------------------------------------------------- normalización
@@ -147,6 +169,8 @@ class Knowledge:
         self.digit_re: re.Pattern | None = None
         self.text_lookup: dict[str, list[Literal]] = {}
         self.digit_lookup: dict[str, list[Literal]] = {}
+        self.term_matcher: fastmatch.TermMatcher | None = None
+        self.digit_matcher: fastmatch.TermMatcher | None = None
 
     def is_excluded(self, value: str) -> bool:
         n = norm(value)
@@ -154,9 +178,29 @@ class Knowledge:
 
     # ---------------------------------------------------------------- compilación
     def compile(self) -> Knowledge:
+        """Prepara la búsqueda de todos los literales.
+
+        * Nombres, apellidos y términos personalizados -> Aho-Corasick (si está disponible).
+        * Resto de textos (direcciones, fechas, correos) -> una regex combinada.
+        * Identificadores numéricos -> otra regex combinada (tolera separadores).
+        """
+        def use_aho(count: int) -> bool:
+            return _literal_engine == "aho" or (_literal_engine == "auto" and count >= AHO_MIN_TERMS)
+
+        literals = list(self.literals.values())
+        names = [lit for lit in literals if lit.name_token or lit.category == "CUSTOM"]
+        digit_lits = [lit for lit in literals if lit.digits]
+        self.term_matcher = fastmatch.TermMatcher() if use_aho(len(names)) else None
+        self.digit_matcher = fastmatch.TermMatcher(digits=True) if use_aho(len(digit_lits)) else None
         groups: dict[bool, list[Literal]] = {False: [], True: []}
         self.text_lookup, self.digit_lookup = {}, {}
-        for lit in self.literals.values():
+        for lit in literals:
+            if self.term_matcher is not None and (lit.name_token or lit.category == "CUSTOM"):
+                self.term_matcher.add(lit.value, lit)
+                continue
+            if self.digit_matcher is not None and lit.digits:
+                self.digit_matcher.add(lit.value, lit)
+                continue
             groups[lit.digits].append(lit)
             table = self.digit_lookup if lit.digits else self.text_lookup
             table.setdefault(lit.lookup, []).append(lit)
@@ -164,14 +208,15 @@ class Knowledge:
         def build(lits: list[Literal]) -> re.Pattern | None:
             if not lits:
                 return None
-            sources = []
-            for lit in sorted(lits, key=lambda item: len(item.value), reverse=True):
-                if lit.source not in sources:
-                    sources.append(lit.source)
+            ordered = sorted(lits, key=lambda item: len(item.value), reverse=True)
+            sources = list(dict.fromkeys(lit.source for lit in ordered))  # sin duplicados, O(n)
             return re.compile(rf"(?<![\w])(?:{'|'.join(sources)})(?![\w])", re.IGNORECASE)
 
         self.text_re = build(groups[False])
         self.digit_re = build(groups[True])
+        for matcher in (self.term_matcher, self.digit_matcher):
+            if matcher is not None:
+                matcher.build()
         return self
 
     def _store(self, slot: tuple[str, bool], literal: Literal) -> None:
@@ -464,6 +509,16 @@ class Redactor:
     # ---------------------------------------------------------------- spans
     def _literal_spans(self, text: str, spans: list[Span]) -> None:
         kn = self.knowledge
+        for matcher in (kn.term_matcher, kn.digit_matcher):
+            if matcher is None:
+                continue
+            for start, end, candidates in matcher.finditer(text):
+                upper = text[start].isupper()
+                for lit in candidates:
+                    if lit.name_token and not upper:
+                        continue
+                    spans.append(Span(start, end, lit.category, lit.key, lit.label, 1 if lit.label else 2))
+                    break
         for regex, table, keyfn in ((kn.text_re, kn.text_lookup, lookup_key),
                                     (kn.digit_re, kn.digit_lookup, norm_digits)):
             if regex is None:

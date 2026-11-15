@@ -26,7 +26,7 @@ epicrisis, informes, etc.), **anonimiza los datos del paciente** y devuelve el r
 | Revisión | lista de datos detectados (valores originales ocultos por defecto); marca falsos positivos para no anonimizarlos; edición manual del resultado |
 | Limpieza | elimina encabezados/pies de página repetidos y números de página |
 | OCR | PDFs escaneados o basados en imágenes, 100% sin conexión: **Tesseract** (español + inglés, invocado sin archivos temporales) o **RapidOCR** (ONNX). Modo automático (sólo páginas escaneadas), todas las páginas o desactivado |
-| Rendimiento | expresiones regulares precompiladas y combinadas; ~2 ms para una epicrisis de 2 páginas, ~1 s para 1,3 millones de caracteres (≈400 páginas densas) |
+| Rendimiento | expresiones regulares precompiladas y combinadas, y Aho-Corasick para propagar cientos o miles de nombres en una sola pasada; ~2 ms para una epicrisis de 2 páginas, ~1 s para 1,3 millones de caracteres o un registro de 2 000 pacientes ([benchmarks](docs/benchmarks.md)) |
 
 ### Cómo detecta los datos
 
@@ -201,10 +201,12 @@ backend/
     pipeline.py         orquestación
     lang.py             marcadores por idioma y detección de idioma
     privacy.py          logging sin contenido clínico
+    fastmatch.py        búsqueda de muchos valores en una pasada (Aho-Corasick)
 frontend/               React + Tailwind (Vite)
 tests/                  pruebas (pytest); fixtures/ y golden/ para regresión
 .github/workflows/      CI
 scripts/make_samples.py PDFs de ejemplo ficticios
+scripts/bench.py        benchmark del motor (docs/benchmarks.md)
 anonimize.spec          configuración de PyInstaller
 build.bat / run.bat / run-dev.bat
 ```

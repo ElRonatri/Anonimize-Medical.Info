@@ -47,7 +47,7 @@ datas += collect_data_files("webview")
 datas += collect_data_files("docx")  # plantillas de python-docx (default.docx, estilos)
 binaries = collect_dynamic_libs("pypdfium2_raw")
 
-hiddenimports = ["pdfplumber", "pdfminer", "pypdfium2", "pyperclip", "docx"]
+hiddenimports = ["pdfplumber", "pdfminer", "pypdfium2", "pyperclip", "docx", "ahocorasick"]
 
 # Tesseract empaquetado (build.bat --tesseract): copia la instalación local a "tesseract/".
 import os

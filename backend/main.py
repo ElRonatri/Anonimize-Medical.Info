@@ -79,7 +79,7 @@ def self_test() -> dict:
 
     Usa sólo datos ficticios y no escribe nada salvo el informe opcional.
     """
-    from anonymizer import __version__, anonymize_document, load_text, ocr
+    from anonymizer import __version__, anonymize_document, detector, fastmatch, load_text, ocr
     from anonymizer.exporters import export_bytes
 
     checks: dict[str, bool] = {}
@@ -90,12 +90,14 @@ def self_test() -> dict:
     checks["export_docx"] = export_bytes("docx", text, result)[:2] == b"PK"
     checks["export_json"] = json.loads(export_bytes("json", text, result))["replacements"] > 0
     checks["frontend_bundled"] = find_frontend() is not None
+    checks["aho_corasick"] = fastmatch.AVAILABLE  # pyahocorasick empaquetado
     return {
         "ok": all(checks.values()),
         "version": __version__,
         "frozen": is_frozen(),
         "checks": checks,
         "ocr_engines": ocr.available_engines(),
+        "literal_engine": detector.literal_engine(),
     }
 
 
