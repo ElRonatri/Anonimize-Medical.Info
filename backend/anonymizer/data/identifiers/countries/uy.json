@@ -1,0 +1,14 @@
+{
+  "country": "Uruguay",
+  "codes": [
+    "UY"
+  ],
+  "patterns": [
+    {
+      "label": "CI_UY",
+      "name": "Cédula de Identidad",
+      "regex": "${B}\\d\\.\\d{3}\\.\\d{3}-\\d${E}",
+      "validator": "ci_uy"
+    }
+  ]
+}

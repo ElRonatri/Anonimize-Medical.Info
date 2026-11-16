@@ -1,0 +1,18 @@
+{
+  "country": "EE.UU.",
+  "codes": [
+    "US"
+  ],
+  "patterns": [
+    {
+      "label": "SSN_US",
+      "name": "Social Security Number",
+      "regex": "${B}(?!000|666|9\\d\\d)\\d{3}-(?!00)\\d{2}-(?!0000)\\d{4}${E}"
+    },
+    {
+      "label": "MBI_US",
+      "name": "Medicare Beneficiary Identifier",
+      "regex": "${B}[1-9][AC-HJKMNP-RT-Y][AC-HJKMNP-RT-Y\\d]\\d-?[AC-HJKMNP-RT-Y][AC-HJKMNP-RT-Y\\d]\\d-?[AC-HJKMNP-RT-Y]{2}\\d{2}${E}"
+    }
+  ]
+}

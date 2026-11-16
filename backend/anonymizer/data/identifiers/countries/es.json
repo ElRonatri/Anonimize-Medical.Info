@@ -1,0 +1,26 @@
+{
+  "country": "España",
+  "codes": [
+    "ES"
+  ],
+  "patterns": [
+    {
+      "label": "DNI_ES",
+      "name": "DNI/NIF",
+      "regex": "${B}\\d{8}-?[A-HJ-NP-TV-Z]${E}",
+      "validator": "dni_es",
+      "flags": [
+        "IGNORECASE"
+      ]
+    },
+    {
+      "label": "NIE_ES",
+      "name": "NIE",
+      "regex": "${B}[XYZ]-?\\d{7}-?[A-HJ-NP-TV-Z]${E}",
+      "validator": "nie_es",
+      "flags": [
+        "IGNORECASE"
+      ]
+    }
+  ]
+}

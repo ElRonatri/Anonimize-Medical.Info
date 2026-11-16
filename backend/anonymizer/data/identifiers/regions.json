@@ -1,0 +1,47 @@
+{
+  "latam": [
+    "AR",
+    "BO",
+    "BR",
+    "CL",
+    "CO",
+    "CR",
+    "EC",
+    "MX",
+    "PE",
+    "PY",
+    "UY",
+    "VE"
+  ],
+  "north_america": [
+    "US",
+    "CA"
+  ],
+  "europe": [
+    "ES",
+    "PT",
+    "FR",
+    "IT",
+    "DE",
+    "NL",
+    "GB",
+    "IE",
+    "SE",
+    "DK",
+    "NO",
+    "FI",
+    "CH",
+    "LI",
+    "PL"
+  ],
+  "asia": [
+    "CN",
+    "IN",
+    "KR",
+    "JP",
+    "SG",
+    "HK",
+    "PK",
+    "AE"
+  ]
+}

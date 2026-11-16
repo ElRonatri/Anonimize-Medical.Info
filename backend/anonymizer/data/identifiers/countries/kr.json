@@ -1,0 +1,13 @@
+{
+  "country": "Corea del Sur",
+  "codes": [
+    "KR"
+  ],
+  "patterns": [
+    {
+      "label": "RRN_KR",
+      "name": "Resident Registration Number",
+      "regex": "${B}\\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\\d|3[01])-[1-8]\\d{6}${E}"
+    }
+  ]
+}

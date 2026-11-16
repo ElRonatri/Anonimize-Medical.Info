@@ -161,7 +161,7 @@ def self_test(expect_ocr: str | None = None, expect_ner: bool = False) -> dict:
 
     Usa sólo datos ficticios y no escribe nada salvo el informe opcional.
     """
-    from anonymizer import __version__, anonymize_document, detector, fastmatch, load_text, ocr
+    from anonymizer import __version__, anonymize_document, detector, fastmatch, identifiers, load_text, ocr
     from anonymizer.exporters import export_bytes
     from anonymizer.ner import info as ner_info
 
@@ -174,6 +174,9 @@ def self_test(expect_ocr: str | None = None, expect_ner: bool = False) -> dict:
     checks["export_json"] = json.loads(export_bytes("json", text, result))["replacements"] > 0
     checks["frontend_bundled"] = find_frontend() is not None
     checks["aho_corasick"] = fastmatch.AVAILABLE  # pyahocorasick empaquetado
+    # Reglas por país (data/identifiers/*.json) empaquetadas y con su validador.
+    checks["country_rules"] = (len(identifiers.ESTRUCTURALES) >= 34
+                               and identifiers.anonimizar("RUN 12.345.678-5") == "RUN [RUN_CL]")
     checks["network_blocked"] = _network_is_blocked()
     checks["parallel_batch"] = _parallel_batch_works()
     if expect_ocr:

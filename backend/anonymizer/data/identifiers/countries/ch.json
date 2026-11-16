@@ -1,0 +1,14 @@
+{
+  "country": "Suiza/Liechtenstein",
+  "codes": [
+    "CH",
+    "LI"
+  ],
+  "patterns": [
+    {
+      "label": "AHV_CH",
+      "name": "AHV/AVS",
+      "regex": "${B}756\\.?\\d{4}\\.?\\d{4}\\.?\\d{2}${E}"
+    }
+  ]
+}

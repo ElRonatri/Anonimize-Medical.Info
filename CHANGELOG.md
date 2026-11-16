@@ -7,6 +7,15 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
+### Cambiado (mantenibilidad)
+- Reglas de identificadores por país movidas a JSON (`backend/anonymizer/data/identifiers/`):
+  un archivo por país, más `contextual.json` y `regions.json`. Se validan al cargar con mensajes
+  que indican archivo y campo. Sin dependencias nuevas (JSON de la biblioteca estándar).
+- Validadores de dígito verificador en `validators.py` con registro por clave (`@register`) y
+  plugins por *entry points* (`anonimize_medical.validators`, sólo desde el código fuente).
+- Reglas locales adicionales sin recompilar con `ANONIMIZE_RULES_DIR`. Guía en
+  `docs/reglas-por-pais.md`; la autoprueba del ejecutable verifica que las reglas estén incluidas.
+
 ### Añadido (privacidad y uso responsable)
 - Diálogo de **primer uso** «Privacidad y uso responsable» (ES/EN): procesamiento 100 % local,
   herramienta de *apoyo* (no garantía de anonimización legal) y revisión obligatoria del resultado,

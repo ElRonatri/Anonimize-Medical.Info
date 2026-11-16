@@ -1,0 +1,21 @@
+{
+  "country": "México",
+  "codes": [
+    "MX"
+  ],
+  "macros": {
+    "MX_STATES": "AS|BC|BS|CC|CL|CM|CS|CH|DF|DG|GT|GR|HG|JC|MC|MN|MS|NT|NL|OC|PL|QT|QR|SP|SL|SR|TC|TS|TL|VZ|YN|ZS|NE"
+  },
+  "patterns": [
+    {
+      "label": "CURP_MX",
+      "name": "CURP",
+      "regex": "${B}[A-Z][AEIOUX][A-Z]{2}\\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\\d|3[01])[HMX](?:${MX_STATES})[B-DF-HJ-NP-TV-Z]{3}[A-Z\\d]\\d${E}"
+    },
+    {
+      "label": "RFC_MX",
+      "name": "RFC",
+      "regex": "${B}[A-ZÑ&]{3,4}\\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\\d|3[01])[A-Z\\d]{2}[A\\d]${E}"
+    }
+  ]
+}
