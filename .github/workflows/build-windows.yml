@@ -1,0 +1,99 @@
+name: Build Windows
+
+# Workflow reutilizable: compila una variante con PyInstaller, ejecuta la autoprueba del .exe
+# (sin ventana ni red), y publica el ZIP con su suma SHA-256. Lo usan ci.yml y release.yml.
+
+on:
+  workflow_call:
+    inputs:
+      variant:
+        description: "base | ocr | tesseract"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Windows (${{ inputs.variant }})
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Interfaz
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+      - name: Dependencias
+        shell: pwsh
+        run: |
+          pip install -r requirements.txt pyinstaller
+          if ("${{ inputs.variant }}" -eq "ocr") { pip install -r requirements-ocr.txt }
+      - name: Tesseract (sólo para empaquetarlo; se descarga en tiempo de build)
+        if: inputs.variant == 'tesseract'
+        run: choco install tesseract -y --no-progress
+      - name: PyInstaller
+        shell: pwsh
+        run: |
+          if ("${{ inputs.variant }}" -eq "ocr") { $env:BUNDLE_RAPIDOCR = "1" }
+          if ("${{ inputs.variant }}" -eq "tesseract") { $env:BUNDLE_TESSERACT_DIR = "C:\Program Files\Tesseract-OCR" }
+          pyinstaller --noconfirm --clean anonimize.spec
+      - name: Autoprueba del ejecutable (sin ventana ni red)
+        shell: pwsh
+        run: |
+          $report = Join-Path $env:RUNNER_TEMP "self-test.json"
+          $cliArgs = @("--self-test", "--self-test-report", "`"$report`"")
+          if ("${{ inputs.variant }}" -eq "ocr") { $cliArgs += @("--expect-ocr", "rapidocr") }
+          if ("${{ inputs.variant }}" -eq "tesseract") { $cliArgs += @("--expect-ocr", "tesseract") }
+          $p = Start-Process -FilePath "dist\AnonimizeMedical\AnonimizeMedical.exe" -ArgumentList $cliArgs -Wait -PassThru
+          Get-Content $report
+          if ($p.ExitCode -ne 0) { throw "La autoprueba falló (código $($p.ExitCode))" }
+          $data = Get-Content $report | ConvertFrom-Json
+          if ("${{ inputs.variant }}" -eq "tesseract" -and $data.tesseract_cmd -notlike "*_internal*") {
+            throw "Se usó un Tesseract del sistema en lugar del empaquetado: $($data.tesseract_cmd)"
+          }
+          $v = (Get-Item "dist\AnonimizeMedical\AnonimizeMedical.exe").VersionInfo.ProductVersion
+          Write-Host "Versión del ejecutable: $v"
+          if (-not $v) { throw "El ejecutable no tiene información de versión" }
+      - name: Variante base sin motores pesados
+        if: inputs.variant == 'base'
+        shell: pwsh
+        run: |
+          foreach ($pkg in @("rapidocr", "onnxruntime", "tesseract")) {
+            if (Test-Path "dist\AnonimizeMedical\_internal\$pkg") { throw "La variante base incluye $pkg" }
+          }
+      - name: Tamaño de la variante
+        shell: pwsh
+        run: |
+          $bytes = (Get-ChildItem -Recurse "dist\AnonimizeMedical" | Measure-Object -Sum Length).Sum
+          $mb = [math]::Round($bytes / 1MB, 1)
+          Write-Host "Tamaño ${{ inputs.variant }}: $mb MB"
+          "| ${{ inputs.variant }} | $mb MB |" >> $env:GITHUB_STEP_SUMMARY
+      # Firma Authenticode (opcional): insertar aquí la firma de dist\AnonimizeMedical\*.exe,
+      # ANTES de comprimir, para que la suma SHA-256 corresponda al ejecutable firmado.
+      # Ver docs/signing.md.
+      - name: ZIP + SHA-256
+        shell: pwsh
+        run: |
+          $version = python -c "import sys; sys.path.insert(0, 'backend'); import anonymizer; print(anonymizer.__version__)"
+          New-Item -ItemType Directory -Force release | Out-Null
+          $zip = "release\AnonimizeMedical-$version-windows-${{ inputs.variant }}.zip"
+          Compress-Archive -Path dist\AnonimizeMedical -DestinationPath $zip
+          python scripts/checksums.py create release -o "release\SHA256SUMS-${{ inputs.variant }}.txt"
+          "**${{ inputs.variant }}**: ``$(Get-Content "release\SHA256SUMS-${{ inputs.variant }}.txt")``" >> $env:GITHUB_STEP_SUMMARY
+      - uses: actions/upload-artifact@v7
+        with:
+          name: AnonimizeMedical-windows-${{ inputs.variant }}
+          path: release/
+          retention-days: 7

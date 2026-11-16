@@ -1,0 +1,116 @@
+name: Release
+
+# Publica un release de Windows con las tres variantes y sus sumas SHA-256.
+#
+# * Al empujar un tag vX.Y.Z (debe coincidir con __version__ y tener sección en CHANGELOG.md):
+#   compila, prueba y PUBLICA el release.
+# * Manualmente (Actions > Release > Run workflow) con "publish" desactivado: ensayo completo
+#   (build + autoprueba + SHA256SUMS.txt como artefacto), sin publicar nada.
+#
+# La firma Authenticode no se ejecuta todavía: ver docs/signing.md.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publicar el release (requiere que el tag vX.Y.Z ya exista)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Versión y CHANGELOG
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - id: version
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            VERSION=$(python scripts/release_notes.py check "${GITHUB_REF_NAME}")
+          else
+            VERSION=$(python scripts/release_notes.py version)
+            python scripts/release_notes.py notes "$VERSION" > /dev/null
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.variant }}
+    needs: check
+    strategy:
+      fail-fast: true
+      matrix:
+        variant: [base, ocr, tesseract]
+    uses: ./.github/workflows/build-windows.yml
+    with:
+      variant: ${{ matrix.variant }}
+
+  publish:
+    name: SHA256SUMS y publicación
+    needs: [check, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # sólo este job puede crear el release
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: AnonimizeMedical-windows-*
+          path: release
+          merge-multiple: true
+      - name: SHA256SUMS.txt (y verificación)
+        run: |
+          rm -f release/SHA256SUMS-*.txt
+          python scripts/checksums.py create release -o release/SHA256SUMS.txt
+          python scripts/checksums.py verify release/SHA256SUMS.txt
+          python scripts/release_notes.py notes "$VERSION" > notes.md
+          {
+            echo ""
+            echo "### Verificación"
+            echo ""
+            echo "Comprueba la descarga con \`Get-FileHash <archivo> -Algorithm SHA256\` (PowerShell)"
+            echo "o \`certutil -hashfile <archivo> SHA256\` y compárala con \`SHA256SUMS.txt\`:"
+            echo ""
+            echo '```'
+            cat release/SHA256SUMS.txt
+            echo '```'
+          } >> notes.md
+          {
+            echo "## SHA256SUMS.txt"
+            echo '```'
+            cat release/SHA256SUMS.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ env.VERSION }}
+          path: |
+            release/*.zip
+            release/SHA256SUMS.txt
+            notes.md
+          retention-days: 14
+      - name: Publicar release
+        if: github.ref_type == 'tag' || inputs.publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v$VERSION" release/*.zip release/SHA256SUMS.txt \
+            --verify-tag --title "Anonimize Medical $VERSION" --notes-file notes.md

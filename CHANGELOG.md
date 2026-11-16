@@ -27,6 +27,13 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 - Los procesos hijos aplican el bloqueo de red y el logging seguro; la autoprueba del `.exe`
   verifica el paralelismo (`freeze_support`).
 
+### Añadido (releases)
+- Workflow de release (`release.yml`, tags `vX.Y.Z`): compila y prueba las tres variantes,
+  publica los ZIP con `SHA256SUMS.txt` y notas tomadas del CHANGELOG; ensayo sin publicar desde
+  *Run workflow*. Build de Windows extraído a un workflow reutilizable (`build-windows.yml`).
+- `scripts/checksums.py` (crear/verificar sumas) y `scripts/release_notes.py`.
+- `docs/release.md` y `docs/signing.md` (firma Authenticode documentada, no activada).
+
 ### Cambiado
 - **OCR int8 evaluado y descartado:** los modelos cuantizados ahorran ≤23 MB (8 % de la variante
   `--ocr`) pero reconocen menos palabras, exponen más datos y son más lentos

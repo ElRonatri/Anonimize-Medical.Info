@@ -165,6 +165,13 @@ variante funcione sin conexión) e informa el tamaño de cada una.
 El resultado queda en `dist\AnonimizeMedical\AnonimizeMedical.exe` (carpeta portable: puedes
 comprimirla y copiarla a otro equipo).
 
+### Descargas, verificación y firma
+
+Cada release (tags `vX.Y.Z`) publica las tres variantes como ZIP con `SHA256SUMS.txt`. Para
+verificar una descarga: `Get-FileHash <archivo> -Algorithm SHA256` en PowerShell y compararlo con
+`SHA256SUMS.txt`. Proceso completo en [docs/release.md](docs/release.md). El ejecutable aún no
+está firmado con Authenticode; cómo activarlo: [docs/signing.md](docs/signing.md).
+
 ### OCR con Tesseract en Windows
 
 1. Instala Tesseract desde [UB Mannheim](https://github.com/UB-Mannheim/tesseract/wiki) y marca los
