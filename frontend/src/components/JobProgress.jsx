@@ -7,7 +7,7 @@ function formatEta(seconds, t) {
   const s = Math.round(seconds)
   if (s < 60) return t('etaSeconds', s)
   const m = Math.floor(s / 60)
-  return t('etaMinutes', m, s % 60)
+  return t('etaMinutes', m, String(s % 60).padStart(2, '0'))
 }
 
 // Indicador dinámico del lote en curso: avance global ponderado, archivos en proceso, procesos
@@ -52,7 +52,7 @@ export default function JobProgress({ job, items, onCancel }) {
                 ? t('cancelling')
                 : active.length > 1
                   ? t('jobProgressParallel', active.length, job.completed, total)
-                  : t('jobProgress', job.completed, total)}
+                  : t('jobProgress', Math.min(job.completed + 1, total), total)}
             </span>
             <span className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
               {job.mode === 'parallel' && (
