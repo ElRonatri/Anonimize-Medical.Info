@@ -243,6 +243,8 @@ def run_window(config: Config, on_loaded: Callable[[Any, Any], None] | None = No
         background_color="#0f172a",
         text_select=True,
     )
+    if window is None:  # pywebview devuelve None si no pudo crear la ventana
+        raise SystemExit("No se pudo crear la ventana de la aplicación")
     api._set_window(window)
     if on_loaded is not None:
         window.events.loaded += lambda *_: threading.Thread(
