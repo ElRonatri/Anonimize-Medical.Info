@@ -12,7 +12,7 @@ export default function Header({ theme, onToggleTheme, version, onOpenResponsibl
         <div className="min-w-0">
           <h1 className="truncate text-base font-semibold leading-tight text-slate-900 dark:text-white">
             Anonimize Medical
-            {version && <span className="ml-2 text-xs font-normal text-slate-400">v{version}</span>}
+            {version && <span className="ml-2 text-xs font-normal text-slate-600 dark:text-slate-400">v{version}</span>}
           </h1>
           <p className="truncate text-xs text-slate-500 dark:text-slate-400">{t('appSubtitle')}</p>
         </div>

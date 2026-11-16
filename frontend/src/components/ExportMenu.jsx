@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import { ChevronDown, Download, FileCode2, FileJson, FileText, FileType2, Loader2 } from 'lucide-react'
+import { useEffect, useId, useRef, useState } from 'react'
+import { Check, ChevronDown, Download, FileCode2, FileJson, FileText, FileType2, Loader2 } from 'lucide-react'
 import { useI18n } from '../i18n.jsx'
 import { loadPref, savePref } from '../storage.js'
 import { Button, cx } from './ui.jsx'
@@ -17,6 +17,38 @@ export default function ExportMenu({ onExport, onExportAll, doneCount }) {
   const [busy, setBusy] = useState(false)
   const [generic, setGeneric] = useState(() => loadPref('exportGeneric', false))
   const ref = useRef(null)
+  const triggerRef = useRef(null)
+  const menuRef = useRef(null)
+  const menuId = useId()
+
+  const items = () => Array.from(menuRef.current?.querySelectorAll('[role^="menuitem"]') ?? [])
+  const closeAndFocus = () => {
+    setOpen(false)
+    triggerRef.current?.focus()
+  }
+
+  // Patrón ARIA de menú: al abrir, foco en la primera opción; flechas, Inicio/Fin, Esc y Tab.
+  useEffect(() => {
+    if (open) items()[0]?.focus()
+  }, [open])
+
+  const onMenuKeyDown = (e) => {
+    const list = items()
+    const i = list.indexOf(document.activeElement)
+    const go = (n) => {
+      e.preventDefault()
+      list[(n + list.length) % list.length]?.focus()
+    }
+    if (e.key === 'ArrowDown') go(i + 1)
+    else if (e.key === 'ArrowUp') go(i - 1)
+    else if (e.key === 'Home') go(0)
+    else if (e.key === 'End') go(list.length - 1)
+    else if (e.key === 'Escape') {
+      e.preventDefault()
+      e.stopPropagation()
+      closeAndFocus()
+    } else if (e.key === 'Tab') setOpen(false)
+  }
 
   useEffect(() => savePref('exportGeneric', generic), [generic])
 
@@ -25,14 +57,14 @@ export default function ExportMenu({ onExport, onExportAll, doneCount }) {
     const close = (e) => {
       if (ref.current && !ref.current.contains(e.target)) setOpen(false)
     }
-    const esc = (e) => e.key === 'Escape' && setOpen(false)
+    const esc = (e) => e.key === 'Escape' && closeAndFocus()
     document.addEventListener('mousedown', close)
     document.addEventListener('keydown', esc)
     return () => {
       document.removeEventListener('mousedown', close)
       document.removeEventListener('keydown', esc)
     }
-  }, [open])
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const run = async (fn) => {
     setOpen(false)
@@ -41,6 +73,7 @@ export default function ExportMenu({ onExport, onExportAll, doneCount }) {
       await fn()
     } finally {
       setBusy(false)
+      triggerRef.current?.focus()
     }
   }
 
@@ -51,10 +84,11 @@ export default function ExportMenu({ onExport, onExportAll, doneCount }) {
         key={fmt.id}
         type="button"
         role="menuitem"
+        tabIndex={-1}
         onClick={() => run(handler)}
-        className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+        className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-slate-700 outline-none hover:bg-slate-100 focus-visible:bg-slate-100 focus-visible:ring-2 focus-visible:ring-teal-600 dark:text-slate-200 dark:hover:bg-slate-800 dark:focus-visible:bg-slate-800"
       >
-        <Icon className="h-4 w-4 text-slate-400" />
+        <Icon className="h-4 w-4 text-slate-500 dark:text-slate-400" aria-hidden />
         {t(`exportFormats.${fmt.id}`)}
       </button>
     )
@@ -62,17 +96,35 @@ export default function ExportMenu({ onExport, onExportAll, doneCount }) {
 
   return (
     <div className="relative" ref={ref}>
-      <Button onClick={() => setOpen((v) => !v)} aria-haspopup="menu" aria-expanded={open} disabled={busy}>
-        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+      <Button
+        ref={triggerRef}
+        onClick={() => setOpen((v) => !v)}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowDown' && !open) {
+            e.preventDefault()
+            setOpen(true)
+          }
+        }}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
+        aria-busy={busy || undefined}
+        disabled={busy}
+      >
+        {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Download className="h-4 w-4" aria-hidden />}
         {t('exportLabel')}
-        <ChevronDown className={cx('h-3.5 w-3.5 transition', open && 'rotate-180')} />
+        <ChevronDown className={cx('h-3.5 w-3.5 transition', open && 'rotate-180')} aria-hidden />
       </Button>
       {open && (
         <div
+          ref={menuRef}
+          id={menuId}
           role="menu"
+          aria-label={t('exportLabel')}
+          onKeyDown={onMenuKeyDown}
           className="absolute right-0 z-30 mt-1.5 w-72 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg dark:border-slate-700 dark:bg-slate-900"
         >
-          <div className="px-2.5 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <div className="px-2.5 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
             {t('exportCurrent')}
           </div>
           {FORMATS.map((fmt) => item(fmt, () => onExport(fmt.id)))}
@@ -80,17 +132,27 @@ export default function ExportMenu({ onExport, onExportAll, doneCount }) {
           {doneCount > 1 && (
             <>
               <div className="my-1.5 border-t border-slate-100 dark:border-slate-800" />
-              <div className="px-2.5 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              <div className="px-2.5 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
                 {t('exportAll', doneCount)}
               </div>
               {FORMATS.map((fmt) => item(fmt, () => onExportAll(fmt.id, generic)))}
-              <label className="mt-1 flex cursor-pointer items-start gap-2 rounded-md px-2.5 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800/60">
-                <input
-                  type="checkbox"
-                  checked={generic}
-                  onChange={(e) => setGeneric(e.target.checked)}
-                  className="mt-0.5 accent-teal-600"
-                />
+              <button
+                type="button"
+                role="menuitemcheckbox"
+                aria-checked={generic}
+                tabIndex={-1}
+                onClick={() => setGeneric((v) => !v)}
+                className="mt-1 flex w-full cursor-pointer items-start gap-2 rounded-md px-2.5 py-1.5 text-left outline-none hover:bg-slate-50 focus-visible:bg-slate-100 focus-visible:ring-2 focus-visible:ring-teal-600 dark:hover:bg-slate-800/60 dark:focus-visible:bg-slate-800"
+              >
+                <span
+                  aria-hidden
+                  className={cx(
+                    'mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border',
+                    generic ? 'border-teal-700 bg-teal-700 text-white dark:border-teal-400 dark:bg-teal-400 dark:text-slate-950' : 'border-slate-400 dark:border-slate-500',
+                  )}
+                >
+                  {generic && <Check className="h-3 w-3" />}
+                </span>
                 <span>
                   <span className="block text-xs font-medium text-slate-700 dark:text-slate-200">
                     {t('exportGeneric')}
@@ -99,7 +161,7 @@ export default function ExportMenu({ onExport, onExportAll, doneCount }) {
                     {t('exportGenericHint')}
                   </span>
                 </span>
-              </label>
+              </button>
             </>
           )}
         </div>

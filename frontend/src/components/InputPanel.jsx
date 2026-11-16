@@ -32,9 +32,9 @@ function StatusIcon({ item }) {
     case 'error':
       return <CircleAlert className={cx(cls, 'text-rose-600')} />
     case 'cancelled':
-      return <Ban className={cx(cls, 'text-slate-400')} />
+      return <Ban className={cx(cls, 'text-slate-600 dark:text-slate-400')} />
     default:
-      return <Clock className={cx(cls, 'text-slate-400')} />
+      return <Clock className={cx(cls, 'text-slate-600 dark:text-slate-400')} />
   }
 }
 
@@ -54,51 +54,50 @@ function FileRow({ item, selected, onSelect, onRemove }) {
   const percent = item.status === 'processing' && item.pages ? Math.round((item.page / item.pages) * 100) : 0
 
   return (
-    <li>
-      <div
-        role="button"
-        tabIndex={0}
+    <li
+      className={cx(
+        'group relative flex items-center gap-1 overflow-hidden rounded-lg pr-1 transition',
+        selected
+          ? 'bg-teal-50 ring-1 ring-teal-200 dark:bg-teal-500/10 dark:ring-teal-500/30'
+          : 'hover:bg-slate-50 dark:hover:bg-slate-800/60',
+      )}
+    >
+      <button
+        type="button"
         onClick={() => onSelect(item.id)}
-        onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onSelect(item.id)}
-        className={cx(
-          'group relative flex cursor-pointer items-center gap-2 overflow-hidden rounded-lg px-2.5 py-2 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-teal-500/50',
-          selected
-            ? 'bg-teal-50 ring-1 ring-teal-200 dark:bg-teal-500/10 dark:ring-teal-500/30'
-            : 'hover:bg-slate-50 dark:hover:bg-slate-800/60',
-        )}
+        aria-current={selected ? 'true' : undefined}
+        className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2.5 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-600"
       >
         <StatusIcon item={item} />
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{item.name}</div>
-          <div
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium text-slate-800 dark:text-slate-100">{item.name}</span>
+          <span
             className={cx(
-              'truncate text-[11px]',
-              item.status === 'error' ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500 dark:text-slate-400',
+              'block truncate text-[11px]',
+              item.status === 'error' ? 'text-rose-700 dark:text-rose-300' : 'text-slate-600 dark:text-slate-400',
             )}
           >
             {detail}
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            onRemove(item.id)
-          }}
-          title={t('remove')}
-          aria-label={t('remove')}
-          disabled={item.status === 'processing'}
-          className="rounded p-1 text-slate-400 opacity-0 transition hover:bg-slate-200 hover:text-slate-700 group-hover:opacity-100 focus:opacity-100 disabled:hidden dark:hover:bg-slate-700 dark:hover:text-slate-200"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-        {percent > 0 && (
-          <span
-            className="absolute bottom-0 left-0 h-0.5 bg-teal-500 transition-[width] duration-300"
-            style={{ width: `${percent}%` }}
-          />
-        )}
-      </div>
+          </span>
+        </span>
+      </button>
+      <button
+        type="button"
+        onClick={() => onRemove(item.id)}
+        title={t('remove')}
+        aria-label={`${t('remove')}: ${item.name}`}
+        disabled={item.status === 'processing'}
+        className="rounded p-1 text-slate-500 opacity-0 transition hover:bg-slate-200 hover:text-slate-800 group-hover:opacity-100 focus:opacity-100 focus-visible:ring-2 focus-visible:ring-teal-600 disabled:hidden dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+      >
+        <X className="h-3.5 w-3.5" aria-hidden />
+      </button>
+      {percent > 0 && (
+        <span
+          aria-hidden
+          className="absolute bottom-0 left-0 h-0.5 bg-teal-500 transition-[width] duration-300"
+          style={{ width: `${percent}%` }}
+        />
+      )}
     </li>
   )
 }
@@ -173,9 +172,9 @@ export default function InputPanel({
             )}
           >
             {hasItems ? (
-              <Plus className="h-6 w-6 text-slate-400 transition group-hover:text-teal-600" />
+              <Plus className="h-6 w-6 text-slate-500 dark:text-slate-400 transition group-hover:text-teal-600" />
             ) : (
-              <FileUp className="h-8 w-8 text-slate-400 transition group-hover:text-teal-600" />
+              <FileUp className="h-8 w-8 text-slate-500 dark:text-slate-400 transition group-hover:text-teal-600" />
             )}
             <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
               {dragging ? t('dropActive') : hasItems ? t('addFiles') : t('dropTitleMulti')}
@@ -183,7 +182,7 @@ export default function InputPanel({
             {!dragging && !hasItems && (
               <>
                 <span className="text-xs text-slate-500 dark:text-slate-400">{t('dropSubtitle')}</span>
-                <span className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">{t('dropHint')}</span>
+                <span className="mt-1 text-[11px] text-slate-600 dark:text-slate-400">{t('dropHint')}</span>
               </>
             )}
           </button>

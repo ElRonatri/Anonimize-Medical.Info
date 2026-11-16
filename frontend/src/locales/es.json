@@ -218,5 +218,10 @@
     "missing_dependency": "Falta un componente para exportar (python-docx).",
     "no_window": "La ventana de la aplicación no está disponible.",
     "generic": "Ocurrió un error inesperado."
-  }
+  },
+  "showOriginal": "Ver original",
+  "showOriginalHint": "Muestra en pantalla los valores originales en lugar de los marcadores, para revisar qué se ocultó. Copiar y exportar usan siempre el texto anonimizado.",
+  "showingOriginal": "Mostrando los datos originales sólo para revisión: no compartas esta vista. Copiar y exportar siguen usando el texto anonimizado.",
+  "viewMode": "Modo de vista",
+  "dismissMessage": "Cerrar aviso"
 }

@@ -71,7 +71,7 @@ jobs:
         run: python scripts/eval_ner.py --thresholds 0.8 | tee -a "$GITHUB_STEP_SUMMARY"
 
   frontend:
-    name: Frontend (build)
+    name: Frontend (build + interfaz)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -83,6 +83,12 @@ jobs:
       - run: npm ci
         working-directory: frontend
       - run: npm run build
+        working-directory: frontend
+      # Pruebas de interfaz, teclado y accesibilidad (axe) con un mock del backend. Chromium se
+      # descarga sólo aquí (herramienta de prueba); no va en el ejecutable.
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - run: npm run test:e2e
         working-directory: frontend
 
   build-windows:

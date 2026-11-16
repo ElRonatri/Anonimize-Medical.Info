@@ -7,6 +7,25 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
+### Añadido (UI/UX y accesibilidad)
+- **«Ver original»** en la vista resaltada: muestra en pantalla los valores originales en lugar de
+  los marcadores para revisar qué se ocultó, con aviso de no compartir la vista. Desactivado por
+  defecto, no se guarda, y copiar/exportar siguen usando el texto anonimizado.
+- Pruebas de interfaz en `frontend/e2e/` (`npm run test:e2e`, también en el CI): aviso de uso
+  responsable, teclado, «Ver original» y auditoría **axe-core** WCAG 2.1 AA en 10 estados (claro y
+  oscuro), hoy sin incumplimientos. Dependencias sólo de desarrollo, no van en el ejecutable:
+  `playwright` 1.63.0 (Apache-2.0; Chromium se descarga sólo en el CI de pruebas) y `axe-core`
+  4.10.3 (MPL-2.0, ~0,5 MB).
+
+### Corregido (accesibilidad)
+- Contraste AA en textos secundarios (antes 2,5–4,3:1) y en el anillo de foco (antes teal al 50 %).
+- Filas de documentos sin controles anidados (`role="button"` con un botón dentro): ahora dos
+  botones, con `aria-current` y «Quitar: <documento>».
+- Menú Exportar con el patrón ARIA de menú: flechas, Inicio/Fin, Esc devuelve el foco, opción de
+  nombres genéricos como `menuitemcheckbox`.
+- `aria-pressed` en selectores segmentados y vista/edición; nombre accesible en el botón para
+  cerrar avisos; íconos decorativos con `aria-hidden`; resultado enfocable para leer con teclado.
+
 ### Seguridad (rastros en disco)
 - La ventana (WebView2) corre en **modo privado** con un perfil propio en
   `%LOCALAPPDATA%\AnonimizeMedical\WebView2`, que se borra al cerrar y, tras un cierre abrupto, al

@@ -218,5 +218,10 @@
     "missing_dependency": "A component required for export is missing (python-docx).",
     "no_window": "The application window is not available.",
     "generic": "An unexpected error occurred."
-  }
+  },
+  "showOriginal": "Show original",
+  "showOriginalHint": "Shows the original values instead of the placeholders, to review what was hidden. Copy and export always use the anonymized text.",
+  "showingOriginal": "Showing original data for review only: do not share this view. Copy and export still use the anonymized text.",
+  "viewMode": "View mode",
+  "dismissMessage": "Dismiss message"
 }

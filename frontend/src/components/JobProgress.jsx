@@ -72,7 +72,7 @@ export default function JobProgress({ job, items, onCancel }) {
                 </li>
               ))
             ) : (
-              <li className="text-xs text-slate-400">{t('status.queued')}…</li>
+              <li className="text-xs text-slate-600 dark:text-slate-400">{t('status.queued')}…</li>
             )}
           </ul>
         </div>

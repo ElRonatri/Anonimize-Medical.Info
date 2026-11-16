@@ -11,7 +11,7 @@ const ENGINE_LABELS = { tesseract: 'Tesseract', rapidocr: 'RapidOCR' }
 
 function SectionTitle({ icon: Icon, children }) {
   return (
-    <div className="flex items-center gap-1.5 border-t border-slate-100 pt-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:border-slate-800">
+    <div className="flex items-center gap-1.5 border-t border-slate-100 pt-3 text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400 dark:border-slate-800">
       {Icon && <Icon className="h-3.5 w-3.5" />}
       {children}
     </div>
@@ -59,7 +59,7 @@ function TermList({ id, label, hint, placeholder, value, onApply, tone = 'defaul
         )}
       />
       <div className="mt-1.5 flex items-start justify-between gap-2">
-        <p className="text-[11px] leading-snug text-slate-400 dark:text-slate-500">{hint}</p>
+        <p className="text-[11px] leading-snug text-slate-600 dark:text-slate-400">{hint}</p>
         <Button onClick={apply} disabled={!dirty} className="shrink-0 px-2.5 py-1 text-xs">
           {t('apply')}
         </Button>
@@ -198,7 +198,7 @@ export default function OptionsPanel({ options, onChange, info }) {
         <p
           className={cx(
             'text-[11px] leading-snug',
-            engines.length ? 'text-slate-400 dark:text-slate-500' : 'text-amber-600 dark:text-amber-400',
+            engines.length ? 'text-slate-600 dark:text-slate-400' : 'text-amber-600 dark:text-amber-400',
           )}
         >
           {engines.length ? `${t('ocrStatusOk', engineNames)} ${t('ocrReloadHint')}` : t('ocrStatusNone')}
@@ -234,14 +234,14 @@ export default function OptionsPanel({ options, onChange, info }) {
                   className="w-full accent-teal-600"
                   aria-valuetext={Number(options.ner_threshold ?? 0.8).toFixed(2)}
                 />
-                <span className="block text-[11px] leading-snug text-slate-400 dark:text-slate-500">
+                <span className="block text-[11px] leading-snug text-slate-600 dark:text-slate-400">
                   {t('nerThresholdHint')}
                 </span>
               </label>
             )}
           </div>
         ) : (
-          <p className="text-[11px] leading-snug text-slate-400 dark:text-slate-500">{t('nerUnavailable')}</p>
+          <p className="text-[11px] leading-snug text-slate-600 dark:text-slate-400">{t('nerUnavailable')}</p>
         )}
 
         <SectionTitle icon={Cpu}>{t('sectionPerformance')}</SectionTitle>
@@ -259,7 +259,7 @@ export default function OptionsPanel({ options, onChange, info }) {
               </option>
             ))}
           </select>
-          <span className="mt-1 block text-[11px] leading-snug text-slate-400 dark:text-slate-500">
+          <span className="mt-1 block text-[11px] leading-snug text-slate-600 dark:text-slate-400">
             {t('maxWorkersHint', info?.cpu_count ?? 1)}
           </span>
         </label>

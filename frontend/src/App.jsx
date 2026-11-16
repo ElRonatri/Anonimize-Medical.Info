@@ -408,8 +408,14 @@ export default function App() {
               <BannerIcon className="mt-0.5 h-4 w-4 shrink-0" />
               <span className="min-w-0 flex-1 break-words">{banner.text}</span>
               {message && (
-                <button type="button" onClick={() => setMessage(null)} className="opacity-60 hover:opacity-100">
-                  <X className="h-4 w-4" />
+                <button
+                  type="button"
+                  onClick={() => setMessage(null)}
+                  aria-label={t('dismissMessage')}
+                  title={t('dismissMessage')}
+                  className="rounded opacity-70 hover:opacity-100 focus:outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-current"
+                >
+                  <X className="h-4 w-4" aria-hidden />
                 </button>
               )}
             </div>
@@ -434,8 +440,8 @@ export default function App() {
             <EntitiesPanel entities={result.entities} excluded={excluded} onExclude={exclude} onRestore={restore} />
           )}
 
-          <p className="flex items-start gap-1.5 px-1 text-xs text-slate-500 dark:text-slate-400">
-            <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <p className="flex items-start gap-1.5 px-1 text-xs text-slate-600 dark:text-slate-400">
+            <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
             {t('privacyNote')}
           </p>
         </section>

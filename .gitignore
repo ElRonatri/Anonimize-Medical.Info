@@ -27,3 +27,4 @@ coverage.xml
 htmlcov/
 .mypy_cache/
 .ruff_cache/
+frontend/e2e/screenshots/

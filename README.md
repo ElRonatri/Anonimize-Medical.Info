@@ -24,7 +24,8 @@ epicrisis, informes, etc.), **anonimiza los datos del paciente** y devuelve el r
 | Por país (opcional) | selector de región/país: formatos validados con dígito verificador (RUN/RUT, CUIL, CPF, CNS, CURP, RFC, CI de Venezuela/Uruguay/Ecuador, SSN, MBI, SIN, DNI/NIE, NIR, Codice Fiscale, NINO, NHS, personnummer, HETU, AHV, Aadhaar, PAN, ID china, RRN, NRIC, HKID, CNIC, Emirates ID), pasaportes MRZ y más de 150 palabras clave de documentos de todo el mundo |
 | Números largos (opcional) | oculta cualquier secuencia de 7+ dígitos, respetando fechas |
 | Marcadores | numerados y consistentes (`[PACIENTE_1]`, `[PERSONA_2]`) o genéricos (`[PACIENTE]`) |
-| Revisión | lista de datos detectados (valores originales ocultos por defecto); marca falsos positivos para no anonimizarlos; edición manual del resultado |
+| Revisión | datos resaltados por categoría en el texto, con **«Ver original»** para revisar qué se ocultó (sólo en pantalla: copiar y exportar usan siempre el texto anonimizado); lista de datos detectados (valores ocultos por defecto); marca falsos positivos; edición manual del resultado |
+| Accesibilidad | navegable con teclado (menús, diálogos, listas), etiquetas ARIA y contraste AA en tema claro y oscuro, verificado con axe-core en el CI |
 | Limpieza | elimina encabezados/pies de página repetidos y números de página |
 | OCR | PDFs escaneados o basados en imágenes, 100% sin conexión: **Tesseract** (español + inglés, invocado sin archivos temporales) o **RapidOCR** (ONNX). Modo automático (sólo páginas escaneadas), todas las páginas o desactivado |
 | Rendimiento | expresiones regulares precompiladas y combinadas, y Aho-Corasick para propagar cientos o miles de nombres en una sola pasada; ~2 ms para una epicrisis de 2 páginas, ~1 s para 1,3 millones de caracteres o un registro de 2 000 pacientes ([benchmarks](docs/benchmarks.md)) |
@@ -224,12 +225,20 @@ pytest --cov                              :: pruebas + cobertura (mínimo 70 %)
 python scripts\make_samples.py samples   :: genera PDFs de ejemplo con datos ficticios
 ```
 
+```bat
+cd frontend
+npm run build && npm run test:e2e          :: interfaz en Chromium: teclado, aviso, «Ver original» y axe (WCAG 2.1 AA)
+```
+
 - **Golden files** (`tests/golden/`): la salida esperada de documentos ficticios. Si un cambio de
   comportamiento es intencional, regenera con `UPDATE_GOLDEN=1 pytest tests/test_golden.py` y revisa el diff.
 - **Autoprueba del ejecutable:** `AnonimizeMedical.exe --self-test --self-test-report informe.json`
   verifica el motor, las exportaciones y la interfaz empaquetada sin abrir la ventana.
-- **CI** (`.github/workflows/ci.yml`): lint, tipos, pruebas en Python 3.10/3.12/3.13, build del
-  frontend y build de Windows con autoprueba en cada push y pull request.
+- **Interfaz** (`frontend/e2e/`): Playwright contra la compilación real con el backend simulado
+  (datos sintéticos, sin red): aviso de uso responsable, teclado, «Ver original» y auditoría axe-core
+  en claro y oscuro. `--screenshots` guarda capturas en `frontend/e2e/screenshots/`.
+- **CI** (`.github/workflows/ci.yml`): lint, tipos, pruebas en Python 3.10/3.12/3.13, build y
+  pruebas de interfaz del frontend, y build de Windows con autoprueba y sonda de privacidad en disco.
 
 ## Estructura
 

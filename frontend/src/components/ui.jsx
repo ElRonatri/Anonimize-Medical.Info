@@ -39,7 +39,7 @@ export function Toggle({ checked, onChange, label, hint, id }) {
           checked={checked}
           onChange={(e) => onChange(e.target.checked)}
         />
-        <span className="h-5 w-9 rounded-full bg-slate-300 transition-colors peer-checked:bg-teal-600 peer-focus-visible:ring-2 peer-focus-visible:ring-teal-500/50 dark:bg-slate-700 dark:peer-checked:bg-teal-500" />
+        <span className="h-5 w-9 rounded-full bg-slate-300 transition-colors peer-checked:bg-teal-600 peer-focus-visible:ring-2 peer-focus-visible:ring-teal-600 focus-visible:ring-offset-1 dark:focus-visible:ring-teal-400 dark:focus-visible:ring-offset-slate-900 dark:bg-slate-700 dark:peer-checked:bg-teal-500" />
         <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform peer-checked:translate-x-4" />
       </span>
     </label>
@@ -56,12 +56,13 @@ export function Segmented({ value, onChange, options, label }) {
             key={opt.value}
             type="button"
             data-testid={`option-${opt.value}`}
+            aria-pressed={value === opt.value}
             onClick={() => onChange(opt.value)}
             title={opt.title}
             className={cx(
-              'rounded-md px-2 py-1.5 text-xs font-medium transition',
+              'rounded-md px-2 py-1.5 text-xs font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600',
               value === opt.value
-                ? 'bg-white text-teal-700 shadow-sm dark:bg-slate-950 dark:text-teal-300'
+                ? 'bg-white text-teal-800 shadow-sm dark:bg-slate-950 dark:text-teal-300'
                 : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100',
             )}
           >
@@ -86,7 +87,7 @@ export function Button({ variant = 'secondary', className, children, ...props })
     <button
       type="button"
       className={cx(
-        'inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/50 disabled:cursor-not-allowed',
+        'inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-1 dark:focus-visible:ring-teal-400 dark:focus-visible:ring-offset-slate-900 disabled:cursor-not-allowed',
         styles[variant],
         className,
       )}

@@ -66,7 +66,7 @@ export default function RegionSelect({ value, onChange, regions, countryFormats 
           </optgroup>
         ))}
       </select>
-      <span className="mt-1 block text-[11px] leading-snug text-slate-400 dark:text-slate-500">{hint}</span>
+      <span className="mt-1 block text-[11px] leading-snug text-slate-600 dark:text-slate-400">{hint}</span>
     </label>
   )
 }

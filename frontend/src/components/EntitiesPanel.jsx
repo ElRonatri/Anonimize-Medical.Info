@@ -57,7 +57,7 @@ export default function EntitiesPanel({ entities, excluded, onExclude, onRestore
                 onClick={() => onExclude(e)}
                 title={t('keepVisible')}
                 aria-label={t('keepVisible')}
-                className="shrink-0 rounded-md p-1 text-slate-400 opacity-0 transition hover:bg-slate-200 hover:text-slate-700 group-hover:opacity-100 focus:opacity-100 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+                className="shrink-0 rounded-md p-1 text-slate-600 dark:text-slate-400 opacity-0 transition hover:bg-slate-200 hover:text-slate-700 group-hover:opacity-100 focus:opacity-100 dark:hover:bg-slate-700 dark:hover:text-slate-200"
               >
                 <Undo2 className="h-4 w-4" />
               </button>
@@ -67,7 +67,7 @@ export default function EntitiesPanel({ entities, excluded, onExclude, onRestore
 
         {excluded.length > 0 && (
           <div className="mt-2 border-t border-slate-100 pt-2 dark:border-slate-800">
-            <div className="px-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-slate-400">
+            <div className="px-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-slate-600 dark:text-slate-400">
               {t('excludedTitle')}
             </div>
             <ul className="space-y-1">
@@ -81,7 +81,7 @@ export default function EntitiesPanel({ entities, excluded, onExclude, onRestore
                     onClick={() => onRestore(i)}
                     title={t('restore')}
                     aria-label={t('restore')}
-                    className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-teal-700 dark:hover:bg-slate-800"
+                    className="rounded-md p-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 hover:text-teal-700 dark:hover:bg-slate-800"
                   >
                     <RotateCcw className="h-4 w-4" />
                   </button>
