@@ -283,7 +283,7 @@ def main(argv: list[str] | None = None) -> int:
     if config.privacy_probe:
         import privacy_probe
 
-        return privacy_probe.run(config, config.privacy_probe, config.probe_sentinel,
+        return privacy_probe.run(config, config.privacy_probe, config.probe_sentinel, run_window,
                                  crash=config.probe_crash, hold=config.probe_hold)
 
     run_window(config)

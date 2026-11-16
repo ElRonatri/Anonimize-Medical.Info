@@ -223,9 +223,8 @@ def test_privacy_probe_end_to_end_with_fake_window(data_dir, tmp_path, monkeypat
         finally:
             appdata.cleanup_webview_profile(profile)
 
-    monkeypatch.setattr(main, "run_window", fake_run_window)
     out = tmp_path / "sonda"
-    code = privacy_probe.run(main.parse_args([]), out, SENTINEL, hold=0)
+    code = privacy_probe.run(main.parse_args([]), out, SENTINEL, fake_run_window, hold=0)
     report_raw = (out / "probe-report.json").read_text(encoding="utf-8")
     report = json.loads(report_raw)
     assert SENTINEL.split()[-1] not in report_raw  # el informe nunca contiene el centinela

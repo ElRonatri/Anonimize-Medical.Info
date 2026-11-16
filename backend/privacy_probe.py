@@ -25,6 +25,7 @@ import logging
 import os
 import time
 import zipfile
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -117,12 +118,12 @@ def _profile_snapshot(profile: Path) -> dict[str, Any]:
     }
 
 
-def run(config: Any, out_dir: Path, sentinel: str, crash: bool = False, hold: float = 5.0) -> int:
+def run(config: Any, out_dir: Path, sentinel: str, run_window: Callable[..., None],
+        crash: bool = False, hold: float = 5.0) -> int:
     import appdata
     from anonymizer import ocr
     from anonymizer.exporters import FORMATS, export_bytes
     from anonymizer.privacy import log_exception
-    from main import run_window
 
     out_dir.mkdir(parents=True, exist_ok=True)
     token = sentinel.split()[-1]  # parte aleatoria: única en el disco
