@@ -5,7 +5,7 @@
 
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
+from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_dynamic_libs, copy_metadata
 
 ROOT = Path(SPECPATH)
 DIST_UI = ROOT / "frontend" / "dist"
@@ -45,6 +45,8 @@ print(f"Anonimize Medical {APP_VERSION}")
 datas = [(str(DIST_UI), "web")]
 datas += collect_data_files("webview")
 datas += collect_data_files("docx")  # plantillas de python-docx (default.docx, estilos)
+# Léxico clínico del NER (texto, se incluye siempre: es pequeño y editable)
+datas.append((str(ROOT / "backend" / "anonymizer" / "data"), "anonymizer/data"))
 binaries = collect_dynamic_libs("pypdfium2_raw")
 
 hiddenimports = ["pdfplumber", "pdfminer", "pypdfium2", "pyperclip", "docx", "ahocorasick"]
@@ -77,6 +79,27 @@ if os.environ.get("BUNDLE_RAPIDOCR") == "1":
     variant.append("rapidocr")
 else:
     excludes += ["rapidocr", "onnxruntime"]  # aunque estén instalados en el entorno
+
+NER_PACKAGES = ["spacy", "thinc", "xx_ent_wiki_sm", "es_core_news_sm", "en_core_web_sm"]
+if os.environ.get("BUNDLE_NER") == "1":
+    import spacy  # noqa: F401  # falla el build si se pidió la variante y no está instalado
+
+    # spaCy registra arquitecturas y modelos por entry points y lee metadatos de paquetes:
+    # se incluyen completos (código, datos, binarios y metadatos).
+    for package in ("spacy", "thinc", "srsly", "blis", "cymem", "preshed", "murmurhash",
+                    "catalogue", "confection", "wasabi", "weasel", "langcodes", "xx_ent_wiki_sm"):
+        try:
+            pkg_datas, pkg_binaries, pkg_hidden = collect_all(package)
+        except Exception:  # paquete opcional no instalado
+            continue
+        datas += pkg_datas
+        binaries += pkg_binaries
+        hiddenimports += pkg_hidden
+    for package in ("spacy", "thinc", "xx_ent_wiki_sm", "catalogue", "confection"):
+        datas += copy_metadata(package)
+    variant.append("ner")
+else:
+    excludes += NER_PACKAGES  # aunque estén instalados en el entorno
 
 if tesseract_dir:
     variant.append("tesseract")

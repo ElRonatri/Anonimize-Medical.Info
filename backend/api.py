@@ -20,7 +20,7 @@ from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from anonymizer import ExtractionError, __version__, anonymize_document, identifiers, load_text, ocr, parallel
+from anonymizer import ExtractionError, __version__, anonymize_document, identifiers, load_text, ner, ocr, parallel
 from anonymizer.document import Document
 from anonymizer.exporters import FORMATS, export_bytes
 from anonymizer.privacy import log_exception
@@ -144,6 +144,7 @@ class Api:
             "regions": {k: list(v) for k, v in identifiers.REGIONES.items()},
             "country_formats": identifiers.formatos_por_pais(),
             "export_formats": list(FORMATS),
+            "ner": ner.info(),
             "cpu_count": parallel.cpu_count(),
             "default_workers": parallel.default_workers(),
         }

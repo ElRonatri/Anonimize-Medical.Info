@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Cpu, ScanText, ShieldOff, SlidersHorizontal } from 'lucide-react'
+import { BrainCircuit, Cpu, ScanText, ShieldOff, SlidersHorizontal } from 'lucide-react'
 import { useI18n } from '../i18n.jsx'
 import { Button, Card, Segmented, Toggle, cx } from './ui.jsx'
 import RegionSelect from './RegionSelect.jsx'
@@ -72,6 +72,7 @@ export default function OptionsPanel({ options, onChange, info }) {
   const { t } = useI18n()
   const set = (key) => (value) => onChange({ ...options, [key]: value })
   const engines = info?.ocr?.engines ?? []
+  const nerAvailable = !!info?.ner?.available
   const engineNames = engines
     .map((e) => (e === 'tesseract' && info?.ocr?.tesseract_languages ? `Tesseract (${info.ocr.tesseract_languages})` : ENGINE_LABELS[e]))
     .join(', ')
@@ -202,6 +203,46 @@ export default function OptionsPanel({ options, onChange, info }) {
         >
           {engines.length ? `${t('ocrStatusOk', engineNames)} ${t('ocrReloadHint')}` : t('ocrStatusNone')}
         </p>
+
+        <SectionTitle icon={BrainCircuit}>{t('sectionNer')}</SectionTitle>
+        {nerAvailable ? (
+          <div className="space-y-2">
+            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+              <Toggle id="opt-ner" checked={!!options.ner} onChange={set('ner')} label={t('nerToggle')} hint={t('nerHint')} />
+              {options.ner && (
+                <Toggle
+                  id="opt-ner-orgs"
+                  checked={!!options.ner_orgs}
+                  onChange={set('ner_orgs')}
+                  label={t('nerOrgs')}
+                  hint={t('nerOrgsHint')}
+                />
+              )}
+            </div>
+            {options.ner && (
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+                  {t('nerThreshold', Number(options.ner_threshold ?? 0.8).toFixed(2))}
+                </span>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="0.99"
+                  step="0.01"
+                  value={options.ner_threshold ?? 0.8}
+                  onChange={(e) => set('ner_threshold')(Number(e.target.value))}
+                  className="w-full accent-teal-600"
+                  aria-valuetext={Number(options.ner_threshold ?? 0.8).toFixed(2)}
+                />
+                <span className="block text-[11px] leading-snug text-slate-400 dark:text-slate-500">
+                  {t('nerThresholdHint')}
+                </span>
+              </label>
+            )}
+          </div>
+        ) : (
+          <p className="text-[11px] leading-snug text-slate-400 dark:text-slate-500">{t('nerUnavailable')}</p>
+        )}
 
         <SectionTitle icon={Cpu}>{t('sectionPerformance')}</SectionTitle>
         <label className="block">

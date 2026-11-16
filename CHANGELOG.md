@@ -34,6 +34,15 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 - `scripts/checksums.py` (crear/verificar sumas) y `scripts/release_notes.py`.
 - `docs/release.md` y `docs/signing.md` (firma Authenticode documentada, no activada).
 
+### Añadido (detección con IA)
+- Segunda pasada NER opcional (variante `build.bat --ner`, desactivada por defecto) para nombres
+  sin etiqueta y organizaciones: modelo multilingüe `xx_ent_wiki_sm` (MIT; se descartó
+  `es_core_news_sm` por GPL-3.0), confianza por *beam search* con umbral ajustable, filtro con
+  léxico clínico editable (`data/clinical_terms.txt`), respeto de excepciones y de la opción de
+  profesionales. Carga sólo los pesos NER sobre el tokenizador del idioma: 127 MB de memoria en
+  lugar de 508 MB. Modelo fijado por hash en `requirements-ner.txt`; nunca se descarga en tiempo
+  de ejecución. `scripts/eval_ner.py`, `docs/ner.md`; CI con job NER y variante Windows `ner`.
+
 ### Cambiado
 - **OCR int8 evaluado y descartado:** los modelos cuantizados ahorran ≤23 MB (8 % de la variante
   `--ocr`) pero reconocen menos palabras, exponen más datos y son más lentos

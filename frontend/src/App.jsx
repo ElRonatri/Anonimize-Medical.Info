@@ -24,6 +24,9 @@ const DEFAULT_OPTIONS = {
   ocr_mode: 'auto',
   ocr_engine: 'auto',
   max_workers: 'auto',
+  ner: false,
+  ner_orgs: false,
+  ner_threshold: 0.8,
   custom_terms: [],
   whitelist: [],
 }

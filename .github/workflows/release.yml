@@ -53,7 +53,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        variant: [base, ocr, tesseract]
+        variant: [base, ocr, tesseract, ner]
     uses: ./.github/workflows/build-windows.yml
     with:
       variant: ${{ matrix.variant }}

@@ -1,0 +1,9 @@
+# OPCIONAL (variante de build --ner): segunda pasada NER para nombres sin etiqueta.
+# Se instala SÓLO en tiempo de build; los modelos van dentro del ejecutable y nunca se descargan
+# en tiempo de ejecución. Aumenta el tamaño del ejecutable (ver docs/ner.md).
+#
+# Modelo: xx_ent_wiki_sm (multilingüe, licencia MIT, ~11 MB). No se usa es_core_news_sm por su
+# licencia GPL-3.0 (ver docs/ner.md). La URL está fijada con su hash SHA-256: pip rechaza el archivo
+# si fue alterado.
+spacy>=3.8,<3.9
+xx_ent_wiki_sm @ https://github.com/explosion/spacy-models/releases/download/xx_ent_wiki_sm-3.8.0/xx_ent_wiki_sm-3.8.0-py3-none-any.whl#sha256=6f3c4b853852ea9e9d2dc76cc950dddb10a7e4c42d813308caefe6c5e8be2f0a

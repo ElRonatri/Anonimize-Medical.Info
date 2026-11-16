@@ -7,14 +7,16 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 from functools import lru_cache
+from typing import Any
 
 from . import fastmatch, identifiers, rules
+from . import ner as ner_engine
 from .lang import PLACEHOLDERS
 
 NAME_CATEGORIES = ("PATIENT", "PERSON", "PROFESSIONAL")
 CATEGORY_PRIORITY = {c: i for i, c in enumerate(
     ("PATIENT", "BIRTHDATE", "ID", "RECORD", "PERSON", "PHONE", "EMAIL", "ADDRESS",
-     "PROFESSIONAL", "CUSTOM", "URL", "IP", "DATE"))}
+     "PROFESSIONAL", "ORGANIZATION", "CUSTOM", "URL", "IP", "DATE"))}
 
 DIGIT_KINDS = {"ID", "RECORD", "PHONE"}
 
@@ -117,6 +119,9 @@ class Options:
     aggressive_numbers: bool = False  # ocultar cualquier secuencia de >= 7 dígitos
     custom_terms: list[str] = field(default_factory=list)
     whitelist: list[str] = field(default_factory=list)  # términos que nunca se anonimizan
+    ner: bool = False  # segunda pasada con NER (sólo variante de build --ner)
+    ner_orgs: bool = False  # además, organizaciones (hospitales, clínicas...)
+    ner_threshold: float = ner_engine.DEFAULT_THRESHOLD
     exclude: list[str] = field(default_factory=list)
 
     @classmethod
@@ -171,6 +176,7 @@ class Knowledge:
         self.digit_lookup: dict[str, list[Literal]] = {}
         self.term_matcher: fastmatch.TermMatcher | None = None
         self.digit_matcher: fastmatch.TermMatcher | None = None
+        self.ner_summary: dict = {"used": False}
 
     def is_excluded(self, value: str) -> bool:
         n = norm(value)
@@ -434,7 +440,44 @@ def _register_value(knowledge: Knowledge, rule: rules.LabelRule, value: str) -> 
         knowledge.add_value(rule.category, value)
 
 
-def build_knowledge(text: str, opts: Options) -> Knowledge:
+def _professional_tokens(text: str) -> set[str]:
+    """Nombres que las reglas identifican como profesionales (etiqueta o tratamiento)."""
+    scratch = Knowledge(set())
+    _extract_labeled(scratch, text, Options(anonymize_professionals=True, anonymize_addresses=False))
+    for pattern in rules.PROFESSIONAL_PATTERNS:
+        for m in pattern.finditer(text):
+            scratch.add_name("PROFESSIONAL", m.group("name"))
+    return {token for category, tokens in scratch.name_keys.values() if category == "PROFESSIONAL"
+            for token in tokens}
+
+
+def _ner_pass(knowledge: Knowledge, text: str, opts: Options, lang: str) -> dict:
+    """Agrega nombres (y organizaciones) del NER a la propagación habitual."""
+    summary: dict[str, Any] = {"used": False, "model": ner_engine.available_models().get(lang),
+                               "persons": 0, "orgs": 0}
+    if not opts.ner or not ner_engine.available(lang):
+        return summary
+    try:
+        threshold = min(0.99, max(0.3, float(opts.ner_threshold)))
+    except (TypeError, ValueError):
+        threshold = ner_engine.DEFAULT_THRESHOLD
+    # Palabras de etiqueta («Teléfono», «Nombre»...), excepciones del usuario y, si no se
+    # anonimizan profesionales, sus nombres: el modelo no distingue roles.
+    stop = set(knowledge.whitelist | knowledge.excluded | _NON_NAME_NORM)
+    if not opts.anonymize_professionals:
+        stop |= _professional_tokens(text)
+    for entity in ner_engine.find_entities(text, lang, threshold, orgs=bool(opts.ner_orgs), stop=frozenset(stop)):
+        if entity.label == "PERSON":
+            knowledge.add_name("PERSON", entity.text)
+            summary["persons"] += 1
+        else:
+            knowledge.add_value("ORGANIZATION", entity.text)
+            summary["orgs"] += 1
+    summary["used"] = True
+    return summary
+
+
+def build_knowledge(text: str, opts: Options, lang: str | None = None) -> Knowledge:
     excluded = {norm(v) for v in opts.exclude} | {norm_digits(v) for v in opts.exclude if norm_digits(v)}
     knowledge = Knowledge(excluded, opts.whitelist)
 
@@ -452,6 +495,8 @@ def build_knowledge(text: str, opts: Options) -> Knowledge:
         for hit in identifiers.contextuales(text):
             category, label = _identifier_category(hit.etiqueta)
             knowledge.add_value(category, hit.texto, label)
+
+    knowledge.ner_summary = _ner_pass(knowledge, text, opts, lang) if lang else {"used": False}
 
     for term in opts.custom_terms:
         knowledge.add_custom(term)

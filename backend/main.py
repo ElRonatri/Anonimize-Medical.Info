@@ -45,6 +45,7 @@ class Config:
     self_test: bool
     self_test_report: Path | None
     expect_ocr: str | None = None
+    expect_ner: bool = False
 
 
 def dev_mode_allowed(requested: bool, frozen: bool) -> bool:
@@ -64,9 +65,12 @@ def parse_args(argv: list[str] | None = None) -> Config:
     parser.add_argument("--self-test-report", type=Path, help="archivo JSON donde escribir el resultado")
     parser.add_argument("--expect-ocr", choices=["tesseract", "rapidocr"],
                         help="(autoprueba) exigir que este motor OCR funcione sin conexión")
+    parser.add_argument("--expect-ner", action="store_true",
+                        help="(autoprueba) exigir que la pasada NER funcione sin conexión")
     args = parser.parse_args(argv)
     return Config(dev=dev_mode_allowed(args.dev, is_frozen()), url=args.url, self_test=args.self_test,
-                  self_test_report=args.self_test_report, expect_ocr=args.expect_ocr)
+                  self_test_report=args.self_test_report, expect_ocr=args.expect_ocr,
+                  expect_ner=args.expect_ner)
 
 
 # --------------------------------------------------------------------------- autoprueba
@@ -141,13 +145,25 @@ def _ocr_works(engine: str) -> bool:
     return any(p.ocr for p in doc.pages) and "prueba" in text and "hemoglobina" in text
 
 
-def self_test(expect_ocr: str | None = None) -> dict:
+def _ner_works() -> bool:
+    """La pasada NER oculta un nombre SIN etiqueta (que las reglas no detectan), sin red."""
+    from anonymizer import anonymize_document, load_text, ner
+
+    if not ner.available("es"):
+        return False
+    text = "Paciente estable.\nAyer se conversó con su hija Bernardita Quiroga sobre el control."
+    out = anonymize_document(load_text(text), {"ner": True, "output_format": "text"})["text"]
+    return "Bernardita" not in out and "Quiroga" not in out and "control" in out
+
+
+def self_test(expect_ocr: str | None = None, expect_ner: bool = False) -> dict:
     """Verifica que el motor, los exportadores y la interfaz empaquetada funcionen.
 
     Usa sólo datos ficticios y no escribe nada salvo el informe opcional.
     """
     from anonymizer import __version__, anonymize_document, detector, fastmatch, load_text, ocr
     from anonymizer.exporters import export_bytes
+    from anonymizer.ner import info as ner_info
 
     checks: dict[str, bool] = {}
     result = anonymize_document(load_text(SELF_TEST_TEXT), {"region": "CL"})
@@ -162,6 +178,8 @@ def self_test(expect_ocr: str | None = None) -> dict:
     checks["parallel_batch"] = _parallel_batch_works()
     if expect_ocr:
         checks[f"ocr_{expect_ocr}"] = _ocr_works(expect_ocr)
+    if expect_ner:
+        checks["ner"] = _ner_works()
     return {
         "ok": all(checks.values()),
         "version": __version__,
@@ -169,6 +187,7 @@ def self_test(expect_ocr: str | None = None) -> dict:
         "checks": checks,
         "ocr_engines": ocr.available_engines(),
         "literal_engine": detector.literal_engine(),
+        "ner": ner_info(),
         "tesseract_cmd": ocr.find_tesseract(),  # ruta del ejecutable usado (para verificar el empaquetado)
     }
 
@@ -220,7 +239,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if config.self_test:
         try:
-            report = self_test(config.expect_ocr)
+            report = self_test(config.expect_ocr, config.expect_ner)
         except Exception as exc:  # el informe debe escribirse incluso si algo falla
             report = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
         payload = json.dumps(report, ensure_ascii=False, indent=2)

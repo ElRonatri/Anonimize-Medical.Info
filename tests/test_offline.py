@@ -118,7 +118,9 @@ def test_heavy_engines_are_opt_in_build_variants():
     base_requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8")
     assert "rapidocr" not in base_requirements and "onnxruntime" not in base_requirements
     ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-    assert "variant: [base, ocr, tesseract]" in ci
+    assert "variant: [base, ocr, tesseract, ner]" in ci
+    assert 'os.environ.get("BUNDLE_NER") == "1"' in spec and "excludes += NER_PACKAGES" in spec
+    assert "spacy" not in base_requirements
 
 
 def test_self_test_fails_when_expected_ocr_engine_missing(tmp_path, monkeypatch):

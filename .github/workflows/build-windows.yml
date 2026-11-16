@@ -7,7 +7,7 @@ on:
   workflow_call:
     inputs:
       variant:
-        description: "base | ocr | tesseract"
+        description: "base | ocr | tesseract | ner"
         required: true
         type: string
 
@@ -40,6 +40,7 @@ jobs:
         run: |
           pip install -r requirements.txt pyinstaller
           if ("${{ inputs.variant }}" -eq "ocr") { pip install -r requirements-ocr.txt }
+          if ("${{ inputs.variant }}" -eq "ner") { pip install -r requirements-ner.txt }
       - name: Tesseract (sólo para empaquetarlo; se descarga en tiempo de build)
         if: inputs.variant == 'tesseract'
         run: choco install tesseract -y --no-progress
@@ -47,6 +48,7 @@ jobs:
         shell: pwsh
         run: |
           if ("${{ inputs.variant }}" -eq "ocr") { $env:BUNDLE_RAPIDOCR = "1" }
+          if ("${{ inputs.variant }}" -eq "ner") { $env:BUNDLE_NER = "1" }
           if ("${{ inputs.variant }}" -eq "tesseract") { $env:BUNDLE_TESSERACT_DIR = "C:\Program Files\Tesseract-OCR" }
           pyinstaller --noconfirm --clean anonimize.spec
       - name: Autoprueba del ejecutable (sin ventana ni red)
@@ -56,6 +58,7 @@ jobs:
           $cliArgs = @("--self-test", "--self-test-report", "`"$report`"")
           if ("${{ inputs.variant }}" -eq "ocr") { $cliArgs += @("--expect-ocr", "rapidocr") }
           if ("${{ inputs.variant }}" -eq "tesseract") { $cliArgs += @("--expect-ocr", "tesseract") }
+          if ("${{ inputs.variant }}" -eq "ner") { $cliArgs += @("--expect-ner") }
           $p = Start-Process -FilePath "dist\AnonimizeMedical\AnonimizeMedical.exe" -ArgumentList $cliArgs -Wait -PassThru
           Get-Content $report
           if ($p.ExitCode -ne 0) { throw "La autoprueba falló (código $($p.ExitCode))" }
@@ -70,7 +73,7 @@ jobs:
         if: inputs.variant == 'base'
         shell: pwsh
         run: |
-          foreach ($pkg in @("rapidocr", "onnxruntime", "tesseract")) {
+          foreach ($pkg in @("rapidocr", "onnxruntime", "tesseract", "spacy", "thinc", "xx_ent_wiki_sm")) {
             if (Test-Path "dist\AnonimizeMedical\_internal\$pkg") { throw "La variante base incluye $pkg" }
           }
       - name: Tamaño de la variante

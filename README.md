@@ -20,6 +20,7 @@ epicrisis, informes, etc.), **anonimiza los datos del paciente** y devuelve el r
 | Datos detectados | nombre del paciente, familiares y contactos, RUT/RUN, DNI, NIE, CURP, cédula, SSN, pasaporte, N° de ficha / historia clínica / MRN, fecha de nacimiento, teléfonos, correos, direcciones y localidades, URLs, IPs |
 | Opcional | nombres de profesionales (médicos, firmantes), todas las fechas, términos personalizados a ocultar |
 | Excepciones | lista de términos que **nunca** se anonimizan (instituciones, fármacos, palabras ocultadas por error) |
+| Detección con IA (opcional) | variante `--ner`: segunda pasada con spaCy para nombres **sin etiqueta** y, si se desea, organizaciones; con umbral de confianza y filtro clínico ([docs/ner.md](docs/ner.md)) |
 | Por país (opcional) | selector de región/país: formatos validados con dígito verificador (RUN/RUT, CUIL, CPF, CNS, CURP, RFC, CI de Venezuela/Uruguay/Ecuador, SSN, MBI, SIN, DNI/NIE, NIR, Codice Fiscale, NINO, NHS, personnummer, HETU, AHV, Aadhaar, PAN, ID china, RRN, NRIC, HKID, CNIC, Emirates ID), pasaportes MRZ y más de 150 palabras clave de documentos de todo el mundo |
 | Números largos (opcional) | oculta cualquier secuencia de 7+ dígitos, respetando fechas |
 | Marcadores | numerados y consistentes (`[PACIENTE_1]`, `[PERSONA_2]`) o genéricos (`[PACIENTE]`) |
@@ -155,6 +156,7 @@ Las opciones se pueden combinar (`build.bat --ocr --tesseract`).
 | base | `build.bat` | motor de anonimización, exportación | no (usa Tesseract si el equipo lo tiene) | 73 MB |
 | ocr | `build.bat --ocr` | + RapidOCR con sus modelos ONNX | sí | 293 MB |
 | tesseract | `build.bat --tesseract` | + Tesseract portable (con los idiomas instalados) | sí | 275 MB |
+| ner | `build.bat --ner` | + detección de nombres con IA (spaCy + modelo multilingüe MIT) | no | ver CI |
 
 \* Carpeta `dist\AnonimizeMedical` sin comprimir, medida por el CI en Windows (la variante
 tesseract con los idiomas que trae el instalador de Chocolatey; varía según los idiomas incluidos).
@@ -236,6 +238,8 @@ backend/
     lang.py             marcadores por idioma y detección de idioma
     privacy.py          logging sin contenido clínico
     fastmatch.py        búsqueda de muchos valores en una pasada (Aho-Corasick)
+    ner.py              segunda pasada NER opcional (spaCy)
+    data/               léxico clínico para el NER (editable)
     parallel.py         extracción en procesos paralelos (progreso, cancelación)
 frontend/               React + Tailwind (Vite)
 tests/                  pruebas (pytest); fixtures/ y golden/ para regresión

@@ -1,7 +1,8 @@
 @echo off
 REM Compila la interfaz y genera el ejecutable de Windows en dist\AnonimizeMedical\
-REM Uso:  build.bat [--ocr] [--tesseract]
+REM Uso:  build.bat [--ocr] [--tesseract] [--ner]
 REM   --ocr        incluye el motor OCR RapidOCR (~100 MB, no requiere instalar nada mas)
+REM   --ner        incluye la deteccion adicional de nombres (spaCy + modelo multilingue, MIT)
 REM   --tesseract  copia Tesseract instalado en el equipo dentro del ejecutable
 REM                (por defecto desde "C:\Program Files\Tesseract-OCR"; cambiar con TESSERACT_DIR)
 setlocal
@@ -9,10 +10,12 @@ cd /d "%~dp0"
 
 set WITH_OCR=0
 set WITH_TESS=0
+set WITH_NER=0
 :args
 if "%~1"=="" goto args_done
 if /I "%~1"=="--ocr" set WITH_OCR=1
 if /I "%~1"=="--tesseract" set WITH_TESS=1
+if /I "%~1"=="--ner" set WITH_NER=1
 shift
 goto args
 :args_done
@@ -32,6 +35,9 @@ pip install -r requirements.txt pyinstaller || exit /b 1
 if "%WITH_OCR%"=="1" pip install -r requirements-ocr.txt || exit /b 1
 set BUNDLE_RAPIDOCR=
 if "%WITH_OCR%"=="1" set BUNDLE_RAPIDOCR=1
+if "%WITH_NER%"=="1" pip install -r requirements-ner.txt || exit /b 1
+set BUNDLE_NER=
+if "%WITH_NER%"=="1" set BUNDLE_NER=1
 
 set BUNDLE_TESSERACT_DIR=
 if "%WITH_TESS%"=="1" (
