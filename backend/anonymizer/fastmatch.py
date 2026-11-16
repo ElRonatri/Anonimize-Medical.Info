@@ -35,7 +35,7 @@ except ImportError:  # pragma: no cover - depende del entorno
 _SEPARATORS = {"/": "/", ".": "/", "-": "/"}
 
 
-class _FoldTable(dict):
+class _FoldTable(dict[int, str]):
     """Tabla para str.translate que calcula (y memoriza) el plegado de cada carácter."""
 
     def __missing__(self, code: int) -> str:
@@ -80,7 +80,7 @@ class _Compressed:
 
     __slots__ = ("text", "_starts", "_deltas", "_bisect")
 
-    def __init__(self, folded: str, gap: re.Pattern, replacement: str) -> None:
+    def __init__(self, folded: str, gap: re.Pattern[str], replacement: str) -> None:
         starts: list[int] = []  # posición comprimida de cada hueco
         deltas: list[int] = []  # caracteres eliminados acumulados DESPUÉS de cada hueco
         delta = 0

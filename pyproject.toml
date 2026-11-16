@@ -24,14 +24,11 @@ known-first-party = ["anonymizer", "api", "main", "make_samples"]
 python_version = "3.10"
 files = ["backend"]
 mypy_path = "backend"
+# Modo estricto en todo el backend (bloque 7). Las dependencias opcionales sin tipos
+# (rapidocr, spacy, pytesseract...) se tratan como Any.
+strict = true
 ignore_missing_imports = true
-warn_unused_configs = true
-warn_redundant_casts = true
-check_untyped_defs = true
-
-[[tool.mypy.overrides]]
-module = ["anonymizer.exporters", "anonymizer.lang", "anonymizer.document", "anonymizer.pipeline"]
-disallow_untyped_defs = true
+warn_unreachable = true
 
 # ---------------------------------------------------------------- tests
 [tool.pytest.ini_options]

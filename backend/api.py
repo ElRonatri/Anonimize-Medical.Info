@@ -19,11 +19,15 @@ from concurrent.futures import FIRST_COMPLETED, Future, wait
 from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from anonymizer import ExtractionError, __version__, anonymize_document, identifiers, load_text, ner, ocr, parallel
 from anonymizer.document import Document
 from anonymizer.exporters import FORMATS, export_bytes
 from anonymizer.privacy import log_exception
+
+# Respuestas y argumentos JSON intercambiados con la interfaz (PyWebView).
+JSONDict = dict[str, Any]
 
 log = logging.getLogger(__name__)
 
@@ -34,7 +38,7 @@ MAX_FILE_BYTES = 80 * 1024 * 1024  # 80 MB por archivo
 PARALLEL_MIN_BYTES = 1024 * 1024
 
 
-def _dialog_type(name: str):
+def _dialog_type(name: str) -> Any:
     """Compatibilidad entre pywebview 4.x (OPEN_DIALOG) y 5.x+ (FileDialog.OPEN)."""
     import webview
 
@@ -51,7 +55,7 @@ def _file_size(path: str | None) -> int:
         return 1
 
 
-def _eta(job: Job, items: list) -> float | None:
+def _eta(job: Job, items: list[Any]) -> float | None:
     """Segundos restantes estimados, ponderando cada archivo por su tamaño."""
     if job.started is None or not items:
         return None
@@ -60,10 +64,10 @@ def _eta(job: Job, items: list) -> float | None:
     done = sum(i.size * i.fraction() for i in items)
     if elapsed < 1.0 or done <= 0 or total <= 0:
         return None
-    return round(elapsed * (total - done) / done, 1)
+    return round(float(elapsed * (total - done) / done), 1)
 
 
-def _error(code: str, detail: str = "") -> dict:
+def _error(code: str, detail: str = "") -> JSONDict:
     return {"ok": False, "error": code, "detail": detail}
 
 
@@ -89,11 +93,11 @@ class Item:
     pages: int = 0
     error: str = ""
     detail: str = ""
-    result: dict | None = None
+    result: JSONDict | None = None
     size: int = 1  # bytes (peso para el tiempo estimado)
     worker: int | None = None  # pid del proceso que lo extrajo
 
-    def public(self) -> dict:
+    def public(self) -> JSONDict:
         return {"id": self.id, "name": self.name, "status": self.status, "stage": self.stage,
                 "page": self.page, "pages": self.pages, "error": self.error, "detail": self.detail,
                 "worker": self.worker}
@@ -110,7 +114,7 @@ class Item:
 class Job:
     id: str
     item_ids: list[str]
-    options: dict
+    options: JSONDict
     num: int = 0  # número para la cancelación compartida con los procesos
     workers: int = 1
     mode: str = "sequential"  # sequential | parallel
@@ -123,7 +127,7 @@ class Job:
 
 class Api:
     def __init__(self) -> None:
-        self._window = None  # privado: pywebview no expone atributos que empiezan con "_"
+        self._window: Any | None = None  # webview.Window; privado: pywebview no expone atributos que empiezan con "_"
         self._lock = threading.RLock()
         self._items: dict[str, Item] = {}
         self._jobs: dict[str, Job] = {}
@@ -132,11 +136,11 @@ class Api:
         self._pool: parallel.ExtractionPool | None = None
         self._job_counter = 0
 
-    def _set_window(self, window) -> None:
+    def _set_window(self, window: Any) -> None:  # webview.Window
         self._window = window
 
     # ------------------------------------------------------------------ info
-    def get_app_info(self) -> dict:
+    def get_app_info(self) -> JSONDict:
         return {
             "version": __version__,
             "ocr": ocr.info(),
@@ -163,7 +167,7 @@ class Api:
         return [str(p) for p in (result if isinstance(result, (list, tuple)) else [result])]
 
     # ------------------------------------------------------------------ lotes
-    def start_batch(self, files: list[dict], options: dict | None = None) -> dict:
+    def start_batch(self, files: list[JSONDict], options: JSONDict | None = None) -> JSONDict:
         """Encola archivos para procesarlos en segundo plano.
 
         `files`: [{"path": "C:/..."} | {"name": "x.pdf", "data": "<base64 o data URL>"}]
@@ -194,7 +198,7 @@ class Api:
         job = self._enqueue([i.id for i in items if i.id not in rejected], options)
         return {"ok": True, "job_id": job.id, "items": [i.public() for i in items]}
 
-    def reload_items(self, item_ids: list[str], options: dict | None = None) -> dict:
+    def reload_items(self, item_ids: list[str], options: JSONDict | None = None) -> JSONDict:
         """Vuelve a extraer (p. ej. tras cambiar el modo de OCR) documentos ya cargados."""
         with self._lock:
             ids = [i for i in item_ids or [] if i in self._items
@@ -205,7 +209,7 @@ class Api:
         job = self._enqueue(ids, options)
         return {"ok": True, "job_id": job.id, "items": [self._items[i].public() for i in ids]}
 
-    def _enqueue(self, ids: list[str], options: dict | None) -> Job:
+    def _enqueue(self, ids: list[str], options: JSONDict | None) -> Job:
         opts = dict(options or {})
         with self._lock:
             self._job_counter += 1
@@ -223,7 +227,7 @@ class Api:
         self._queue.put(job.id)
         return job
 
-    def get_job(self, job_id: str, known: list[str] | None = None) -> dict:
+    def get_job(self, job_id: str, known: list[str] | None = None) -> JSONDict:
         """Estado del lote. Incluye el resultado de cada archivo terminado sólo una vez."""
         known_set = set(known or [])
         with self._lock:
@@ -249,7 +253,7 @@ class Api:
                 "results": results,
             }
 
-    def cancel_job(self, job_id: str) -> dict:
+    def cancel_job(self, job_id: str) -> JSONDict:
         with self._lock:
             job = self._jobs.get(job_id)
             if job is None:
@@ -267,7 +271,7 @@ class Api:
         if pool is not None:
             pool.shutdown()
 
-    def remove_items(self, item_ids: list[str]) -> dict:
+    def remove_items(self, item_ids: list[str]) -> JSONDict:
         with self._lock:
             for i in item_ids or []:
                 self._items.pop(i, None)
@@ -381,7 +385,7 @@ class Api:
 
     def _run_parallel(self, job: Job, ids: list[str]) -> None:
         opts = job.options
-        futures: dict[Future, Item] = {}
+        futures: dict[Future[Any], Item] = {}
         try:
             pool = self._ensure_pool(job.workers)
             for item_id in ids:  # se envían en el orden de la cola
@@ -422,7 +426,7 @@ class Api:
             self._discard_pool()
             self._run_sequential(job, retry)
 
-    def _collect(self, item: Item, future: Future, opts: dict) -> bool:
+    def _collect(self, item: Item, future: Future[Any], opts: JSONDict) -> bool:
         """Registra el resultado de un proceso. False si el pool se rompió (hay que reintentar)."""
         if future.cancelled():
             with self._lock:
@@ -449,7 +453,7 @@ class Api:
         return True
 
     # ---------------------------------------------------------------- resultados
-    def _finish(self, item: Item, doc: Document, opts: dict) -> None:
+    def _finish(self, item: Item, doc: Document, opts: JSONDict) -> None:
         with self._lock:
             item.stage = "anonymize"
         try:
@@ -466,7 +470,7 @@ class Api:
             item.status, item.error, item.detail = "error", code.split(":", 1)[0], code
 
     @staticmethod
-    def _anonymize(doc, options: dict, item: Item) -> dict:
+    def _anonymize(doc: Document, options: JSONDict, item: Item) -> JSONDict:
         result = anonymize_document(doc, options)
         result["ok"] = True
         result["id"] = item.id
@@ -474,7 +478,7 @@ class Api:
         return result
 
     # ------------------------------------------------------------------ texto pegado
-    def process_text(self, text: str, options: dict | None = None) -> dict:
+    def process_text(self, text: str, options: JSONDict | None = None) -> JSONDict:
         if not text or not text.strip():
             return _error("empty_text")
         item = Item(id=uuid.uuid4().hex[:12], name="texto", status="done")
@@ -486,15 +490,17 @@ class Api:
         return {"ok": True, "item": item.public(), "result": item.result}
 
     # ------------------------------------------------------------------ re-anonimizar
-    def reprocess(self, options: dict | None = None, item_ids: list[str] | None = None) -> dict:
+    def reprocess(self, options: JSONDict | None = None, item_ids: list[str] | None = None) -> JSONDict:
         """Re-anonimiza documentos ya extraídos con nuevas opciones (sin releer los PDF)."""
         with self._lock:
             ids = item_ids if item_ids is not None else list(self._items)
-            targets = [self._items[i] for i in ids if i in self._items and self._items[i].doc is not None]
+            targets = [(self._items[i], self._items[i].doc) for i in ids if i in self._items]
         results = {}
-        for item in targets:
+        for item, doc in targets:
+            if doc is None:
+                continue
             try:
-                result = self._anonymize(item.doc, options or {}, item)
+                result = self._anonymize(doc, options or {}, item)
             except Exception as exc:  # pragma: no cover
                 log_exception(log, "Error re-anonimizando el elemento %s", exc, item.id)
                 results[item.id] = _error("process_error", str(exc))
@@ -507,7 +513,7 @@ class Api:
         return {"ok": True, "results": results}
 
     # ------------------------------------------------------------------ exportación
-    def _content(self, document: dict, fmt: str, options: dict | None) -> tuple[str, dict]:
+    def _content(self, document: JSONDict, fmt: str, options: JSONDict | None) -> tuple[str, JSONDict]:
         """Texto y metadatos a exportar.
 
         Si el usuario no editó el resultado, se regenera en el formato más adecuado:
@@ -526,7 +532,7 @@ class Api:
             return result["text"], {**meta, **result}
         return text, meta
 
-    def export_file(self, document: dict, fmt: str = "md", options: dict | None = None) -> dict:
+    def export_file(self, document: JSONDict, fmt: str = "md", options: JSONDict | None = None) -> JSONDict:
         """Guarda un resultado. `document`: {"id", "name", "text", "edited", "meta"}."""
         if fmt not in FORMATS:
             return _error("unsupported_format", fmt)
@@ -547,8 +553,8 @@ class Api:
         meta.setdefault("name", document.get("name"))
         return self._write(target, fmt, text, meta)
 
-    def export_batch(self, documents: list[dict], fmt: str = "md", options: dict | None = None,
-                     generic_names: bool = False) -> dict:
+    def export_batch(self, documents: list[JSONDict], fmt: str = "md", options: JSONDict | None = None,
+                     generic_names: bool = False) -> JSONDict:
         """Exporta varios resultados a una carpeta elegida por el usuario."""
         if fmt not in FORMATS:
             return _error("unsupported_format", fmt)
@@ -560,8 +566,8 @@ class Api:
         folder_path = Path(folder[0] if isinstance(folder, (list, tuple)) else str(folder))
         return self.export_to_folder(str(folder_path), documents, fmt, options, generic_names)
 
-    def export_to_folder(self, folder: str, documents: list[dict], fmt: str,
-                         options: dict | None = None, generic_names: bool = False) -> dict:
+    def export_to_folder(self, folder: str, documents: list[JSONDict], fmt: str,
+                         options: JSONDict | None = None, generic_names: bool = False) -> JSONDict:
         if fmt not in FORMATS:
             return _error("unsupported_format", fmt)
         folder_path = Path(folder)
@@ -585,7 +591,7 @@ class Api:
         return {"ok": True, "folder": str(folder_path), "count": len(written), "written": written}
 
     @staticmethod
-    def _write(target: Path, fmt: str, content: str, meta: dict | None) -> dict:
+    def _write(target: Path, fmt: str, content: str, meta: JSONDict | None) -> JSONDict:
         try:
             target.write_bytes(export_bytes(fmt, content, meta))
         except ImportError as exc:
@@ -594,7 +600,7 @@ class Api:
             return _error("write_error", str(exc))
         return {"ok": True, "path": str(target)}
 
-    def copy_to_clipboard(self, text: str) -> dict:
+    def copy_to_clipboard(self, text: str) -> JSONDict:
         try:
             import pyperclip
 

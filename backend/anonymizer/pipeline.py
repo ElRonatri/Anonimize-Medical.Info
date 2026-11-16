@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from typing import Any
 
 from .detector import Options, Redactor, build_knowledge
 from .document import Document
@@ -10,7 +11,7 @@ from .lang import SUPPORTED_LANGUAGES, detect_language
 from .render import render, strip_repeated_lines
 
 
-def anonymize_document(doc: Document, options: dict | Options | None = None) -> dict:
+def anonymize_document(doc: Document, options: dict[str, Any] | Options | None = None) -> dict[str, Any]:
     started = time.perf_counter()
     opts = options if isinstance(options, Options) else Options.from_dict(options)
 

@@ -15,6 +15,7 @@ import logging
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 APP_TITLE = "Anonimize Medical"
 DEV_URL = "http://localhost:5173"
@@ -156,7 +157,7 @@ def _ner_works() -> bool:
     return "Bernardita" not in out and "Quiroga" not in out and "control" in out
 
 
-def self_test(expect_ocr: str | None = None, expect_ner: bool = False) -> dict:
+def self_test(expect_ocr: str | None = None, expect_ner: bool = False) -> dict[str, Any]:
     """Verifica que el motor, los exportadores y la interfaz empaquetada funcionen.
 
     Usa sólo datos ficticios y no escribe nada salvo el informe opcional.

@@ -19,6 +19,10 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
   `{0}` y plurales con `Intl.PluralRules`), aptos para herramientas de traducción. Prueba que
   ambos idiomas tengan las mismas claves y argumentos y que toda clave usada exista. Guía en
   `docs/traducciones.md`. Corrige «Se exportaron 1 archivo» → «Se exportó 1 archivo».
+- `mypy --strict` (más `warn_unreachable`) en todo el backend, sin excepciones por módulo: tipos
+  completos en las funciones que faltaban (páginas de pdfplumber, OCR, API con `JSONDict`).
+  Detectó que `Api._window` se infería como `None`, lo que dejaba sin revisar el código de los
+  diálogos de archivo.
 
 ### Añadido (privacidad y uso responsable)
 - Diálogo de **primer uso** «Privacidad y uso responsable» (ES/EN): procesamiento 100 % local,

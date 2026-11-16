@@ -94,7 +94,7 @@ def formatos_por_pais() -> dict[str, list[str]]:
     return out
 
 
-def patrones_para(paises: frozenset[str] | None) -> list[tuple[Patron, re.Pattern]]:
+def patrones_para(paises: frozenset[str] | None) -> list[tuple[Patron, re.Pattern[str]]]:
     if paises is None:
         return []
     if not paises:  # todas
@@ -125,7 +125,7 @@ CONTEXTUAL = re.compile((
 ).replace(r"\s", r"[ \t]"))
 
 
-def _contextual(kw: str, primera: str) -> re.Pattern:
+def _contextual(kw: str, primera: str) -> re.Pattern[str]:
     # La anticipación del primer carácter permite descartar rápido las posiciones imposibles.
     return re.compile((
         f"(?={primera})" + B + r"(?P<kw>" + kw + r")\.?" + E + _SEP
@@ -197,7 +197,7 @@ def _primer_caracter(cuerpo: str) -> str | None:
     return None
 
 
-def _compilar(p: Patron) -> re.Pattern:
+def _compilar(p: Patron) -> re.Pattern[str]:
     """Precompila el patrón anteponiendo una anticipación del primer carácter.
 
     Las expresiones empiezan con un lookbehind, lo que impide al motor descartar

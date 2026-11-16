@@ -164,7 +164,7 @@ class ExtractionPool:
                 log_exception(log, "Error actualizando el progreso", exc)
 
     def submit(self, item_id: str, job_num: int, name: str, path: str | None, data: bytes | None,
-               ocr_mode: str, ocr_engine: str) -> Future:
+               ocr_mode: str, ocr_engine: str) -> Future[Any]:
         return self._executor.submit(extract_task, item_id, job_num, name, path, data, ocr_mode, ocr_engine)
 
     def cancel_job(self, job_num: int) -> None:

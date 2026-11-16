@@ -27,7 +27,10 @@ import sys
 import threading
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from pdfplumber.page import Page as PdfPage
 
 log = logging.getLogger(__name__)
 
@@ -66,7 +69,8 @@ def _app_dirs() -> list[Path]:
 
 def find_tesseract() -> str | None:
     if "tesseract_cmd" in _cache:
-        return _cache["tesseract_cmd"]  # type: ignore[return-value]
+        cached: str | None = _cache["tesseract_cmd"]
+        return cached
     candidates = [os.environ.get("TESSERACT_CMD", "")]
     for base in _app_dirs():
         candidates += [str(base / "tesseract" / "tesseract.exe"), str(base / "tesseract" / "tesseract")]
@@ -88,7 +92,9 @@ def _tesseract_env(cmd: str) -> dict[str, str]:
     return env
 
 
-def _run_tesseract(args: list[str], data: bytes | None = None, timeout: float = 180) -> subprocess.CompletedProcess:
+def _run_tesseract(
+    args: list[str], data: bytes | None = None, timeout: float = 180,
+) -> subprocess.CompletedProcess[bytes]:
     cmd = find_tesseract()
     if cmd is None:
         raise RuntimeError("tesseract_not_found")
@@ -123,7 +129,8 @@ def rapid_model_paths() -> dict[str, str] | None:
         except ImportError:
             paths = None
         _cache["rapid_models"] = paths
-    return _cache["rapid_models"]
+    models: dict[str, str] | None = _cache["rapid_models"]
+    return models
 
 
 def _rapidocr_ready() -> bool:
@@ -163,10 +170,11 @@ def tesseract_languages() -> str:
         except (OSError, subprocess.SubprocessError, RuntimeError) as exc:  # pragma: no cover
             log.debug("No se pudieron listar los idiomas de Tesseract (%s)", type(exc).__name__)
         _cache["tess_langs"] = langs
-    return _cache["tess_langs"]  # type: ignore[return-value]
+    cached_langs: str = _cache["tess_langs"]
+    return cached_langs
 
 
-def info() -> dict:
+def info() -> dict[str, Any]:
     engines = available_engines()
     return {
         "available": bool(engines),
@@ -177,7 +185,7 @@ def info() -> dict:
 
 # --------------------------------------------------------------------------- OCR
 
-def ocr_page(pdf_page, engine: str | None = None) -> list[str]:
+def ocr_page(pdf_page: PdfPage, engine: str | None = None) -> list[str]:
     """Rasteriza una página de pdfplumber y devuelve sus líneas de texto ordenadas."""
     engine = pick_engine(engine)
     if engine == TESSERACT:
@@ -187,7 +195,7 @@ def ocr_page(pdf_page, engine: str | None = None) -> list[str]:
     raise RuntimeError("no_ocr_engine")
 
 
-def _ocr_tesseract(pdf_page, resolution: int = 300) -> list[str]:
+def _ocr_tesseract(pdf_page: PdfPage, resolution: int = 300) -> list[str]:
     image = pdf_page.to_image(resolution=resolution).original.convert("L")
     buffer = io.BytesIO()
     image.save(buffer, format="PNG")
@@ -200,7 +208,7 @@ def _ocr_tesseract(pdf_page, resolution: int = 300) -> list[str]:
     return [line.rstrip() for line in proc.stdout.decode("utf-8", "replace").splitlines()]
 
 
-def _get_rapid():
+def _get_rapid() -> Any:  # rapidocr.RapidOCR (dependencia opcional)
     global _rapid_engine
     with _lock:
         if _rapid_engine is None:
@@ -218,7 +226,7 @@ def _get_rapid():
     return _rapid_engine
 
 
-def _ocr_rapid(pdf_page, resolution: int = 200) -> list[str]:
+def _ocr_rapid(pdf_page: PdfPage, resolution: int = 200) -> list[str]:
     import numpy as np
 
     image = pdf_page.to_image(resolution=resolution).original.convert("RGB")

@@ -29,7 +29,7 @@ _PAGE_MARK_RE = re.compile(r"^\*([^*]+)\*$")
 _ESCAPED_PIPE = "\u0000"
 
 
-def export_bytes(fmt: str, text: str, meta: dict | None = None) -> bytes:
+def export_bytes(fmt: str, text: str, meta: dict[str, Any] | None = None) -> bytes:
     meta = meta or {}
     if fmt == "docx":
         return to_docx(text, markdown=meta.get("format", "markdown") == "markdown")
@@ -40,7 +40,7 @@ def export_bytes(fmt: str, text: str, meta: dict | None = None) -> bytes:
 
 # --------------------------------------------------------------------------- JSON
 
-def to_json(text: str, meta: dict) -> str:
+def to_json(text: str, meta: dict[str, Any]) -> str:
     entities = [
         {"placeholder": e.get("placeholder"), "category": e.get("category"), "count": e.get("count", 0)}
         for e in meta.get("entities", [])

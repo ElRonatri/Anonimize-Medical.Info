@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import sys
 import traceback
+from typing import Any
 
 # Librerías de terceros que procesan contenido del documento.
 QUIET_LOGGERS = ("pdfminer", "pdfplumber", "PIL", "pypdfium2", "docx", "rapidocr", "RapidOCR",
@@ -77,7 +78,7 @@ def _url_host(url: object) -> str:
     return urlsplit(str(url)).hostname or ""
 
 
-def _audit(event: str, args: tuple) -> None:
+def _audit(event: str, args: tuple[Any, ...]) -> None:
     if event == "urllib.Request":  # cubre peticiones que irían por un proxy (local o del sistema)
         host = _url_host(args[0])
     elif event == "socket.getaddrinfo":

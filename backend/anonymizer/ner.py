@@ -109,7 +109,7 @@ def available(lang: str | None = None) -> bool:
     return bool(models) if lang is None else lang in models
 
 
-def info() -> dict:
+def info() -> dict[str, Any]:
     return {"available": available(), "models": available_models(), "threshold": DEFAULT_THRESHOLD}
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import functools
 import re
 import unicodedata
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any
@@ -94,7 +95,7 @@ def fuzzy_digits_pattern(value: str) -> str:
     return r"[\s.\-/()]?".join(re.escape(c) for c in chars)
 
 
-def compile_terms(terms) -> re.Pattern | None:
+def compile_terms(terms: Iterable[str]) -> re.Pattern[str] | None:
     """Una sola regex precompilada (insensible a tildes/mayúsculas) para una lista de términos."""
     terms = sorted({t for t in terms if t and t.strip()}, key=len, reverse=True)
     if not terms:
@@ -125,7 +126,7 @@ class Options:
     exclude: list[str] = field(default_factory=list)
 
     @classmethod
-    def from_dict(cls, data: dict | None) -> Options:
+    def from_dict(cls, data: dict[str, Any] | None) -> Options:
         data = data or {}
         opts = cls()
         for key, value in data.items():
@@ -170,13 +171,13 @@ class Knowledge:
         self.token_keys: dict[str, tuple[str, str]] = {}  # token normalizado -> (cat, key)
         self.name_keys: dict[str, tuple[str, set[str]]] = {}  # key -> (cat, tokens)
         self._counter = 0
-        self.text_re: re.Pattern | None = None
-        self.digit_re: re.Pattern | None = None
+        self.text_re: re.Pattern[str] | None = None
+        self.digit_re: re.Pattern[str] | None = None
         self.text_lookup: dict[str, list[Literal]] = {}
         self.digit_lookup: dict[str, list[Literal]] = {}
         self.term_matcher: fastmatch.TermMatcher | None = None
         self.digit_matcher: fastmatch.TermMatcher | None = None
-        self.ner_summary: dict = {"used": False}
+        self.ner_summary: dict[str, Any] = {"used": False}
 
     def is_excluded(self, value: str) -> bool:
         n = norm(value)
@@ -211,7 +212,7 @@ class Knowledge:
             table = self.digit_lookup if lit.digits else self.text_lookup
             table.setdefault(lit.lookup, []).append(lit)
 
-        def build(lits: list[Literal]) -> re.Pattern | None:
+        def build(lits: list[Literal]) -> re.Pattern[str] | None:
             if not lits:
                 return None
             ordered = sorted(lits, key=lambda item: len(item.value), reverse=True)
@@ -451,7 +452,7 @@ def _professional_tokens(text: str) -> set[str]:
             for token in tokens}
 
 
-def _ner_pass(knowledge: Knowledge, text: str, opts: Options, lang: str) -> dict:
+def _ner_pass(knowledge: Knowledge, text: str, opts: Options, lang: str) -> dict[str, Any]:
     """Agrega nombres (y organizaciones) del NER a la propagación habitual."""
     summary: dict[str, Any] = {"used": False, "model": ner_engine.available_models().get(lang),
                                "persons": 0, "orgs": 0}
@@ -547,7 +548,7 @@ class Redactor:
         self.countries = identifiers.resolver_region(opts.region)
         self.numbers: dict[tuple[str, str], int] = {}
         self.per_category: dict[str, int] = {}
-        self.report: dict[str, dict] = {}
+        self.report: dict[str, dict[str, Any]] = {}
 
     # ---------------------------------------------------------------- placeholders
     def placeholder(self, category: str, key: str, specific: str | None = None) -> str:
@@ -612,7 +613,8 @@ class Redactor:
                 spans = [s for s in spans if not any(a <= s.start and s.end <= b for a, b in allowed)]
         return spans
 
-    def _pattern_spans(self, text, spans, regex, category, digits=False):
+    def _pattern_spans(self, text: str, spans: list[Span], regex: re.Pattern[str], category: str,
+                       digits: bool = False) -> None:
         excluded = self.knowledge.is_excluded
         for m in regex.finditer(text):
             value = m.group(0)
@@ -699,7 +701,7 @@ class Redactor:
         out.append(text[pos:])
         return "".join(out)
 
-    def entities(self) -> list[dict]:
+    def entities(self) -> list[dict[str, Any]]:
         items = sorted(self.report.values(),
                        key=lambda e: (CATEGORY_PRIORITY.get(e["category"], 99), e["placeholder"]))
         return [dict(e) for e in items]

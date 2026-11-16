@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import lru_cache
 
@@ -186,11 +187,11 @@ _SEP_REQUIRED = _NUMBER_MARK + r"\s*(?:[:：](?:\s*\|)?|\|)\s*"
 _SEP_OPTIONAL = _NUMBER_MARK + r"\s*(?:[:：#](?:\s*\|)?|\||-\s|\s)\s*"
 
 
-def _alternation(labels) -> str:
+def _alternation(labels: Iterable[str]) -> str:
     return "|".join(sorted(labels, key=len, reverse=True))
 
 
-def compile_rule(rule: LabelRule) -> re.Pattern:
+def compile_rule(rule: LabelRule) -> re.Pattern[str]:
     sep = _SEP_REQUIRED if rule.colon_required else _SEP_OPTIONAL
     pattern = rf"(?<![\w]){'(?:' + _alternation(rule.labels) + ')'}(?![\w]){sep}"
     # Las reglas se aplican sobre el texto completo YA EN MINÚSCULAS (ver `lower_same_length`),
@@ -217,7 +218,7 @@ COMPILED_RULES = [(rule, compile_rule(rule)) for rule in LABEL_RULES]
 
 
 @lru_cache(maxsize=8)
-def combined_rules(professionals: bool, addresses: bool) -> tuple[re.Pattern, tuple[LabelRule, ...]]:
+def combined_rules(professionals: bool, addresses: bool) -> tuple[re.Pattern[str], tuple[LabelRule, ...]]:
     """Todas las reglas activas en UNA expresión precompilada (una sola pasada por el texto).
 
     Cada regla es un grupo con nombre (r0, r1, ...) y `match.lastgroup` indica cuál coincidió.

@@ -212,7 +212,7 @@ def v_hetu_fi(s: str) -> bool:
 
 def v_mrz_cd(campo: str, dv: str) -> bool:
     """Dígito verificador ICAO 9303 (pesos 7-3-1)."""
-    def val(c):
+    def val(c: str) -> int:
         if c.isdigit():
             return int(c)
         if c == "<":

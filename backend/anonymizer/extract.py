@@ -7,6 +7,11 @@ import logging
 import re
 from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from pdfplumber.page import Page as PdfPage
+    from pdfplumber.table import Table as PdfTable
 
 from . import ocr
 from .document import Block, Document, Page
@@ -116,7 +121,7 @@ def _load_pdf(name: str, data: bytes, ocr_mode: str, ocr_engine: str,
     return doc
 
 
-def _needs_ocr(pdf_page, page: Page, mode: str) -> bool:
+def _needs_ocr(pdf_page: PdfPage, page: Page, mode: str) -> bool:
     """¿Conviene reconocer esta página como imagen?"""
     if mode == OCR_FORCE or page.empty:
         return True
@@ -129,10 +134,10 @@ def _needs_ocr(pdf_page, page: Page, mode: str) -> bool:
         image_area = sum(abs((im["x1"] - im["x0"]) * (im["bottom"] - im["top"])) for im in pdf_page.images)
     except Exception:
         return False
-    return image_area / page_area > 0.3
+    return bool(image_area / page_area > 0.3)
 
 
-def _extract_page_blocks(pdf_page) -> list[Block]:
+def _extract_page_blocks(pdf_page: PdfPage) -> list[Block]:
     tables = []
     try:
         tables = [t for t in pdf_page.find_tables() if _table_is_meaningful(t)]
@@ -141,7 +146,7 @@ def _extract_page_blocks(pdf_page) -> list[Block]:
 
     bboxes = [t.bbox for t in tables]
 
-    def outside_tables(obj) -> bool:
+    def outside_tables(obj: dict[str, Any]) -> bool:
         if obj.get("object_type") != "char":
             return True
         cx = (obj["x0"] + obj["x1"]) / 2
@@ -165,7 +170,7 @@ def _extract_page_blocks(pdf_page) -> list[Block]:
     return [block for _, block in positioned]
 
 
-def _table_is_meaningful(table) -> bool:
+def _table_is_meaningful(table: PdfTable) -> bool:
     rows = table.extract()
     if len(rows) < 2:
         return False
@@ -176,20 +181,20 @@ def _table_is_meaningful(table) -> bool:
     return filled >= 3
 
 
-def _clean_cell(value) -> str:
+def _clean_cell(value: str | None) -> str:
     if value is None:
         return ""
     return _fix_cid(" ".join(str(value).split()))
 
 
-def _lines_from_words(page) -> list[tuple[float, str]]:
+def _lines_from_words(page: PdfPage) -> list[tuple[float, str]]:
     """Reconstruye líneas a partir de palabras, preservando huecos grandes como '   '."""
     words = page.extract_words(keep_blank_chars=False, use_text_flow=False, x_tolerance=1.5)
     if not words:
         return []
     words.sort(key=lambda w: (round(w["top"]), w["x0"]))
 
-    lines: list[list[dict]] = []
+    lines: list[list[dict[str, Any]]] = []
     for word in words:
         if lines and abs(lines[-1][0]["top"] - word["top"]) <= LINE_TOLERANCE:
             lines[-1].append(word)

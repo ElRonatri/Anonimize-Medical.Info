@@ -49,3 +49,13 @@ def test_self_test_reports_failure(tmp_path, monkeypatch):
     report = tmp_path / "report.json"
     assert main.main(["--self-test", "--self-test-report", str(report)]) == 1
     assert json.loads(report.read_text(encoding="utf-8"))["checks"]["frontend_bundled"] is False
+
+
+def test_mypy_is_strict_for_whole_backend():
+    """Bloque 7: el backend completo se verifica con mypy --strict (no retroceder)."""
+    import pytest
+
+    tomllib = pytest.importorskip("tomllib")  # Python >= 3.11
+    config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["mypy"]
+    assert config["strict"] is True and config["files"] == ["backend"]
+    assert "overrides" not in config  # sin excepciones por módulo
