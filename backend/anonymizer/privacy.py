@@ -51,6 +51,31 @@ def configure_logging(dev: bool = False) -> None:
         logging.getLogger(name).setLevel(logging.WARNING)
 
 
+# --------------------------------------------------------------------------- volcados de memoria
+
+WER_FAULT_REPORTING_FLAG_NOHEAP = 1  # werapi.h
+
+
+def is_windows() -> bool:
+    return sys.platform == "win32"
+
+
+def limit_crash_dumps() -> bool:
+    """Excluye el heap (donde vive el texto de los documentos) de los informes de error de Windows.
+
+    Afecta sólo a este proceso y no cambia la configuración del sistema. Devuelve True si se aplicó.
+    """
+    if not is_windows():
+        return False
+    try:
+        import ctypes
+
+        wer = getattr(ctypes, "WinDLL")("wer.dll")  # noqa: B009 (sólo existe en Windows)
+        return int(wer.WerSetFlags(WER_FAULT_REPORTING_FLAG_NOHEAP)) == 0  # S_OK
+    except (OSError, AttributeError):
+        return False
+
+
 # --------------------------------------------------------------------------- red
 
 _LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost", "0.0.0.0", "", None}

@@ -7,6 +7,19 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
+### Seguridad (rastros en disco)
+- La ventana (WebView2) corre en **modo privado** con un perfil propio en
+  `%LOCALAPPDATA%\AnonimizeMedical\WebView2`, que se borra al cerrar y, tras un cierre abrupto, al
+  volver a abrir. Antes el perfil era persistente y genérico (`%APPDATA%\pywebview`): caché, Local
+  Storage y posibles volcados de Crashpad.
+- Informes de fallos de WebView2 desactivados (`--disable-breakpad --disable-crash-reporter`) y
+  Windows Error Reporting sin el heap del proceso (`WerSetFlags`).
+- Preferencias en `%APPDATA%\AnonimizeMedical\prefs.json`, escritas por el backend con una lista
+  cerrada de claves y tipos: cualquier otra cosa se descarta.
+- Sonda `--privacy-probe` y paso de CI en Windows: con el `.exe` real, un nombre centinela, OCR en
+  procesos paralelos, exportación y un cierre abrupto simulado, busca el centinela (UTF-8/UTF-16)
+  en `%TEMP%`, `%LOCALAPPDATA%` y `%APPDATA%`. Documentado en `docs/privacidad-en-disco.md`.
+
 ### Cambiado (mantenibilidad)
 - Reglas de identificadores por país movidas a JSON (`backend/anonymizer/data/identifiers/`):
   un archivo por país, más `contextual.json` y `regions.json`. Se validan al cargar con mensajes

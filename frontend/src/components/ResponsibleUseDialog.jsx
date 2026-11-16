@@ -132,6 +132,7 @@ export default function ResponsibleUseDialog({ open, dontShowAgain, onClose }) {
           <button
             ref={primaryRef}
             type="button"
+            data-testid="responsible-ok"
             onClick={close}
             className="rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2 dark:bg-teal-400 dark:text-slate-950 dark:hover:bg-teal-300 dark:focus-visible:ring-offset-slate-900"
           >

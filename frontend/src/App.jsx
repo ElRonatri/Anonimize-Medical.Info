@@ -34,8 +34,9 @@ const DEFAULT_OPTIONS = {
 
 const POLL_MS = 250
 
-// Privacidad: las preferencias se guardan en el perfil de WebView2, pero NUNCA los términos a
-// ocultar (suelen ser nombres de pacientes): sólo viven durante la sesión.
+// Privacidad: las preferencias se guardan (prefs.json, vía backend), pero NUNCA los términos a
+// ocultar (suelen ser nombres de pacientes): sólo viven durante la sesión. El backend además
+// descarta cualquier clave que no esté en su lista (backend/appdata.py).
 function persistable({ custom_terms: _sessionOnly, ...rest }) {
   return rest
 }

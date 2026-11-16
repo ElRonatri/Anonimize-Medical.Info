@@ -104,15 +104,26 @@ Garantías del diseño, verificadas por pruebas automáticas (`tests/test_privac
   los archivos de la propia interfaz. La autoprueba del ejecutable verifica el bloqueo de red.
 - **Sin archivos temporales.** Los PDF se leen en memoria. El OCR con Tesseract recibe la imagen
   por la entrada estándar y devuelve el texto por la salida estándar; RapidOCR trabaja en memoria.
-  Lo único que se escribe en disco son las exportaciones que el usuario guarda.
+  Los procesos en paralelo reciben los datos por tuberías. El ejecutable es *onedir* (no se
+  descomprime en `%TEMP%`). Lo único que se escribe son las exportaciones y `prefs.json`.
 - **Logs sin contenido clínico.** Nunca se registran textos, valores detectados ni nombres de
   archivo (suelen contener el nombre del paciente). De los errores sólo se guarda el tipo y la
   línea de código, no el mensaje. Las librerías que leen el PDF quedan en nivel WARNING incluso en
   modo desarrollo. El ejecutable no tiene consola ni archivo de log.
 - **Memoria.** Los documentos cargados permanecen en RAM mientras la aplicación está abierta (para
   re-anonimizar al cambiar opciones) y se liberan al quitarlos de la lista o cerrar la aplicación.
-- **Preferencias.** Idioma, tema, opciones y la lista de excepciones se guardan en el perfil de
-  WebView2 del usuario. Los *términos adicionales a ocultar* **no** se guardan: duran la sesión.
+- **En disco queda sólo `prefs.json`** (`%APPDATA%\AnonimizeMedical`): idioma, tema, opciones,
+  la lista de excepciones y el aviso de uso responsable. El backend sólo acepta esas claves y tipos;
+  cualquier otra cosa se descarta. Los *términos adicionales a ocultar* **no** se guardan.
+- **La ventana no deja rastros.** WebView2 corre en modo privado con un perfil propio
+  (`%LOCALAPPDATA%\AnonimizeMedical\WebView2`: caché, Local Storage, IndexedDB, Crashpad) que se
+  **borra al cerrar** y, si la aplicación terminó por un error, **al volver a abrirla**. Los informes
+  de fallos de WebView2 se desactivan y los de Windows excluyen la memoria con los documentos.
+  Lo verifica el CI de Windows con el ejecutable real y un nombre centinela: ver
+  [docs/privacidad-en-disco.md](docs/privacidad-en-disco.md).
+- **Fuera del control de la aplicación:** el portapapeles y su historial (`Win + V`), los archivos
+  que exportas, la lista de archivos recientes de los diálogos de Windows, el archivo de paginación
+  y la hibernación. Recomendaciones en el mismo documento.
 - **Herramientas de desarrollo.** DevTools y el menú «Inspeccionar» sólo existen al ejecutar desde el
   código con `run-dev.bat`; en el `.exe`, `--dev` se ignora.
 - **Exportaciones.** El JSON no incluye los valores originales detectados. Al exportar varios

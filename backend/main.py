@@ -13,6 +13,8 @@ import argparse
 import json
 import logging
 import sys
+import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -47,6 +49,10 @@ class Config:
     self_test_report: Path | None
     expect_ocr: str | None = None
     expect_ner: bool = False
+    privacy_probe: Path | None = None
+    probe_sentinel: str = ""
+    probe_crash: bool = False
+    probe_hold: float = 5.0
 
 
 def dev_mode_allowed(requested: bool, frozen: bool) -> bool:
@@ -68,10 +74,19 @@ def parse_args(argv: list[str] | None = None) -> Config:
                         help="(autoprueba) exigir que este motor OCR funcione sin conexión")
     parser.add_argument("--expect-ner", action="store_true",
                         help="(autoprueba) exigir que la pasada NER funcione sin conexión")
+    probe = parser.add_argument_group("sonda de privacidad (CI)")
+    probe.add_argument("--privacy-probe", type=Path, metavar="CARPETA",
+                       help="usar la ventana real con un dato centinela y escribir un informe (ver privacy_probe.py)")
+    probe.add_argument("--probe-sentinel", default="", help="nombre sintético único, p. ej. 'Zxqwerty Centinela Qwmzk'")
+    probe.add_argument("--probe-crash", action="store_true", help="terminar de golpe al final (simula un fallo)")
+    probe.add_argument("--probe-hold", type=float, default=5.0, help="segundos con la ventana abierta al final")
     args = parser.parse_args(argv)
+    if args.privacy_probe and len(args.probe_sentinel.split()) < 3:
+        parser.error("--privacy-probe requiere --probe-sentinel con nombre y dos apellidos")
     return Config(dev=dev_mode_allowed(args.dev, is_frozen()), url=args.url, self_test=args.self_test,
                   self_test_report=args.self_test_report, expect_ocr=args.expect_ocr,
-                  expect_ner=args.expect_ner)
+                  expect_ner=args.expect_ner, privacy_probe=args.privacy_probe,
+                  probe_sentinel=args.probe_sentinel, probe_crash=args.probe_crash, probe_hold=args.probe_hold)
 
 
 # --------------------------------------------------------------------------- autoprueba
@@ -198,15 +213,24 @@ def self_test(expect_ocr: str | None = None, expect_ner: bool = False) -> dict[s
 
 # --------------------------------------------------------------------------- aplicación
 
-def run_window(config: Config) -> None:
+def run_window(config: Config, on_loaded: Callable[[Any, Any], None] | None = None) -> None:
+    """Abre la ventana. `on_loaded(window, api)` corre en un hilo al cargar la página (sonda de privacidad)."""
     import webview
 
+    import appdata
     from api import Api
 
     dev = config.dev
     url = config.url if dev else str(find_frontend() or "")
     if not dev and not url:
         raise SystemExit("No se encontró la interfaz compilada. Ejecuta: cd frontend && npm install && npm run build")
+
+    # Perfil de WebView2 en una carpeta propia, en modo privado: nada de la página (caché,
+    # Local Storage, IndexedDB, volcados de Crashpad) sobrevive al cierre. Se limpia también al
+    # iniciar, por si un cierre por error dejó restos. Las preferencias van a prefs.json (backend).
+    profile = appdata.webview_profile_dir()
+    appdata.cleanup_webview_profile(profile)
+    appdata.configure_webview2_environment()
 
     api = Api()
     window = webview.create_window(
@@ -220,24 +244,27 @@ def run_window(config: Config) -> None:
         text_select=True,
     )
     api._set_window(window)
+    if on_loaded is not None:
+        window.events.loaded += lambda *_: threading.Thread(
+            target=on_loaded, args=(window, api), name="on-loaded", daemon=True).start()
 
     # En Windows pywebview usa Edge WebView2 (incluido en Windows 10/11).
     # debug=True (DevTools, menú "Inspeccionar") sólo en desarrollo; ver dev_mode_allowed().
-    # private_mode=False permite que la interfaz recuerde preferencias (idioma, tema, opciones);
-    # nunca se guarda contenido clínico ni los términos personalizados (ver frontend/src/App.jsx).
     try:
-        webview.start(debug=dev, http_server=not dev, private_mode=False)
+        webview.start(debug=dev, http_server=not dev, private_mode=True, storage_path=str(profile))
     finally:
         api.shutdown()  # cierra los procesos de extracción
+        appdata.cleanup_webview_profile(profile)
 
 
 def main(argv: list[str] | None = None) -> int:
-    from anonymizer.privacy import block_network, configure_logging
+    from anonymizer.privacy import block_network, configure_logging, limit_crash_dumps
 
     config = parse_args(argv)
     configure_logging(dev=config.dev)
     # Sin descargas ni conexiones externas: sólo se permite la red local (interfaz en 127.0.0.1).
     block_network()
+    limit_crash_dumps()  # informes de error de Windows sin el heap (texto de los documentos)
     if "--dev" in (argv if argv is not None else sys.argv[1:]) and not config.dev:
         logging.getLogger(__name__).warning("--dev se ignora en el ejecutable distribuido")
 
@@ -252,6 +279,12 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(payload)
         return 0 if report.get("ok") else 1
+
+    if config.privacy_probe:
+        import privacy_probe
+
+        return privacy_probe.run(config, config.privacy_probe, config.probe_sentinel,
+                                 crash=config.probe_crash, hold=config.probe_hold)
 
     run_window(config)
     return 0

@@ -55,6 +55,7 @@ export function Segmented({ value, onChange, options, label }) {
           <button
             key={opt.value}
             type="button"
+            data-testid={`option-${opt.value}`}
             onClick={() => onChange(opt.value)}
             title={opt.title}
             className={cx(

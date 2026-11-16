@@ -25,6 +25,7 @@ from anonymizer import ExtractionError, __version__, anonymize_document, identif
 from anonymizer.document import Document
 from anonymizer.exporters import FORMATS, export_bytes
 from anonymizer.privacy import log_exception
+from appdata import PrefStore
 
 # Respuestas y argumentos JSON intercambiados con la interfaz (PyWebView).
 JSONDict = dict[str, Any]
@@ -126,7 +127,8 @@ class Job:
 
 
 class Api:
-    def __init__(self) -> None:
+    def __init__(self, prefs: PrefStore | None = None) -> None:
+        self._prefs = prefs or PrefStore()
         self._window: Any | None = None  # webview.Window; privado: pywebview no expone atributos que empiezan con "_"
         self._lock = threading.RLock()
         self._items: dict[str, Item] = {}
@@ -138,6 +140,19 @@ class Api:
 
     def _set_window(self, window: Any) -> None:  # webview.Window
         self._window = window
+
+    # ------------------------------------------------------------------ preferencias
+    def get_prefs(self) -> JSONDict:
+        """Preferencias guardadas (sólo claves y tipos permitidos; ver appdata.PREF_RULES)."""
+        return {"ok": True, "prefs": self._prefs.load()}
+
+    def set_pref(self, key: str, value: Any) -> JSONDict:
+        try:
+            saved = self._prefs.set(str(key), value)
+        except OSError as exc:
+            log_exception(log, "No se pudo guardar una preferencia", exc)
+            return _error("write_error")
+        return {"ok": saved} if saved else _error("invalid_pref")
 
     # ------------------------------------------------------------------ info
     def get_app_info(self) -> JSONDict:

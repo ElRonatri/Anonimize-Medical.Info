@@ -48,6 +48,7 @@ export default function Header({ theme, onToggleTheme, version, onOpenResponsibl
         <button
           type="button"
           onClick={onToggleTheme}
+          data-testid="theme-toggle"
           title={t('themeToggle')}
           aria-label={t('themeToggle')}
           className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"

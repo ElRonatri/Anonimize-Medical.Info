@@ -190,13 +190,20 @@ export default function InputPanel({
         ) : (
           <div className="space-y-2" {...dropProps}>
             <textarea
+              data-testid="paste-text"
               value={pasteText}
               onChange={(e) => onPasteTextChange(e.target.value)}
               placeholder={t('pastePlaceholder')}
               spellCheck={false}
               className="h-40 w-full resize-y rounded-xl border border-slate-200 bg-slate-50 p-3 font-mono text-xs leading-relaxed text-slate-800 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
             />
-            <Button variant="primary" className="w-full" onClick={onSubmitText} disabled={!pasteText.trim()}>
+            <Button
+              variant="primary"
+              className="w-full"
+              onClick={onSubmitText}
+              disabled={!pasteText.trim()}
+              data-testid="anonymize-text"
+            >
               <Sparkles className="h-4 w-4" />
               {t('anonymizeText')}
             </Button>

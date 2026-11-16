@@ -80,7 +80,7 @@ export default function ResultPanel({
         ))}
       </div>
       <ExportMenu onExport={onExport} onExportAll={onExportAll} doneCount={doneCount} />
-      <Button variant="primary" onClick={onCopy}>
+      <Button variant="primary" onClick={onCopy} data-testid="copy-result">
         {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
         {copied ? t('copied') : t('copy')}
       </Button>
