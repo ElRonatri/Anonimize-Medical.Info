@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { CircleCheck, Lock, TriangleAlert, X } from 'lucide-react'
+import { CircleCheck, Info, Lock, TriangleAlert, X } from 'lucide-react'
 import Header from './components/Header.jsx'
 import InputPanel from './components/InputPanel.jsx'
 import OptionsPanel from './components/OptionsPanel.jsx'
 import ResultPanel from './components/ResultPanel.jsx'
 import EntitiesPanel from './components/EntitiesPanel.jsx'
 import JobProgress from './components/JobProgress.jsx'
+import ResponsibleUseDialog from './components/ResponsibleUseDialog.jsx'
 import { backend, copyText, getApi } from './api.js'
 import { useI18n } from './i18n.jsx'
 import { loadPref, savePref } from './storage.js'
@@ -69,6 +70,12 @@ export default function App() {
 
   const [message, setMessage] = useState(null) // { kind: 'error' | 'warning' | 'success', text }
   const [copied, setCopied] = useState(false)
+
+  // Privacidad y uso responsable: diálogo de primer uso (sólo se guarda "no volver a mostrar")
+  // y recordatorio, una vez por sesión, al copiar o exportar por primera vez.
+  const [dontShowResponsible, setDontShowResponsible] = useState(() => loadPref('responsibleUseDismissed', false) === true)
+  const [responsibleOpen, setResponsibleOpen] = useState(() => loadPref('responsibleUseDismissed', false) !== true)
+  const reminderShown = useRef(false)
 
   const resultsRef = useRef(results)
   resultsRef.current = results
@@ -284,9 +291,24 @@ export default function App() {
     return { id: item.id, name: item.name, text: drafts[item.id]?.text ?? '', edited: !!drafts[item.id]?.edited, meta }
   }
 
+  const closeResponsible = (dontShowAgain) => {
+    setResponsibleOpen(false)
+    setDontShowResponsible(dontShowAgain)
+    savePref('responsibleUseDismissed', !!dontShowAgain)
+  }
+
+  // Devuelve el recordatorio la primera vez en la sesión (y null después).
+  const takeReminder = () => {
+    if (reminderShown.current) return null
+    reminderShown.current = true
+    return t('reviewReminder')
+  }
+
   const copy = async () => {
     if (!draft) return
     if (await copyText(draft.text)) {
+      const reminder = takeReminder()
+      if (reminder) setMessage({ kind: 'info', text: reminder })
       setCopied(true)
       setTimeout(() => setCopied(false), 1800)
     } else {
@@ -297,12 +319,19 @@ export default function App() {
   const exportOne = async (fmt) => {
     if (!selected || !result) return
     const res = await backend.exportFile(docPayload(selected), fmt, requestOptions)
-    if (!res?.ok && !res?.cancelled) setMessage({ kind: 'error', text: errorText(res?.error) })
+    if (res?.ok) {
+      const reminder = takeReminder()
+      if (reminder) setMessage({ kind: 'info', text: reminder })
+    } else if (!res?.cancelled) setMessage({ kind: 'error', text: errorText(res?.error) })
   }
 
   const exportAll = async (fmt, generic) => {
     const res = await backend.exportBatch(doneItems.map(docPayload), fmt, requestOptions, generic)
-    if (res?.ok) setMessage({ kind: 'success', text: `${t('exportedMany', res.count)} ${res.folder}` })
+    if (res?.ok) {
+      const reminder = takeReminder()
+      const done = `${t('exportedMany', res.count)} ${res.folder}`
+      setMessage({ kind: 'success', text: reminder ? `${done} ${reminder}` : done })
+    }
     else if (!res?.cancelled) setMessage({ kind: 'error', text: errorText(res?.error) })
   }
 
@@ -325,13 +354,21 @@ export default function App() {
     error: 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300',
     warning: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300',
     success: 'border-teal-200 bg-teal-50 text-teal-800 dark:border-teal-500/30 dark:bg-teal-500/10 dark:text-teal-300',
+    info: 'border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-100',
   }
-  const BannerIcon = banner?.kind === 'success' ? CircleCheck : TriangleAlert
+  const BannerIcon = banner?.kind === 'success' ? CircleCheck : banner?.kind === 'info' ? Info : TriangleAlert
 
   // ---------------------------------------------------------------- render
   return (
-    <div className="flex h-full flex-col">
-      <Header theme={theme} onToggleTheme={() => setTheme((v) => (v === 'dark' ? 'light' : 'dark'))} version={info?.version} />
+    <>
+    {/* Con el diálogo abierto, el resto de la app queda inerte (ni foco ni lector de pantalla). */}
+    <div className="flex h-full flex-col" inert={responsibleOpen || undefined}>
+      <Header
+        theme={theme}
+        onToggleTheme={() => setTheme((v) => (v === 'dark' ? 'light' : 'dark'))}
+        version={info?.version}
+        onOpenResponsible={() => setResponsibleOpen(true)}
+      />
 
       {backendMissing && (
         <div className="border-b border-amber-200 bg-amber-50 px-5 py-2 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
@@ -363,7 +400,10 @@ export default function App() {
           <JobProgress job={job} items={items} onCancel={cancelJob} />
 
           {banner && (
-            <div role="alert" className={`flex items-start gap-2 rounded-xl border px-3 py-2 text-sm ${bannerStyles[banner.kind]}`}>
+            <div
+              role={banner.kind === 'error' ? 'alert' : 'status'}
+              className={`flex items-start gap-2 rounded-xl border px-3 py-2 text-sm ${bannerStyles[banner.kind]}`}
+            >
               <BannerIcon className="mt-0.5 h-4 w-4 shrink-0" />
               <span className="min-w-0 flex-1 break-words">{banner.text}</span>
               {message && (
@@ -400,5 +440,7 @@ export default function App() {
         </section>
       </main>
     </div>
+    <ResponsibleUseDialog open={responsibleOpen} dontShowAgain={dontShowResponsible} onClose={closeResponsible} />
+    </>
   )
 }

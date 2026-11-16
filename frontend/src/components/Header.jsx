@@ -1,7 +1,7 @@
-import { Languages, Moon, ShieldCheck, Sun } from 'lucide-react'
+import { Info, Languages, Moon, ShieldCheck, Sun } from 'lucide-react'
 import { UI_LANGUAGES, useI18n } from '../i18n.jsx'
 
-export default function Header({ theme, onToggleTheme, version }) {
+export default function Header({ theme, onToggleTheme, version, onOpenResponsible }) {
   const { t, lang, setLang } = useI18n()
   return (
     <header className="flex items-center justify-between gap-4 border-b border-slate-200 bg-white/80 px-5 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/80">
@@ -19,6 +19,17 @@ export default function Header({ theme, onToggleTheme, version }) {
       </div>
 
       <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onOpenResponsible}
+          title={t('responsibleTitle')}
+          aria-label={t('responsibleTitle')}
+          aria-haspopup="dialog"
+          className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm text-slate-700 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+        >
+          <Info className="h-4 w-4" aria-hidden />
+          <span className="hidden md:inline">{t('responsibleTitle')}</span>
+        </button>
         <label className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-800">
           <Languages className="h-4 w-4 text-slate-500" aria-hidden />
           <span className="sr-only">{t('uiLanguage')}</span>

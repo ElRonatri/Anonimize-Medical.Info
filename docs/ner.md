@@ -20,7 +20,7 @@ Opcionalmente, también **organizaciones** con nombre propio («Hospital del Sal
 
 | | Sin NER | Con NER |
 |---|---:|---:|
-| Tamaño del ejecutable | variante base | ver tabla de variantes en el README (medido por el CI) |
+| Tamaño del ejecutable (carpeta / ZIP) | 73 MB / 40 MB | 278 MB / 98 MB (medido por el CI) |
 | Memoria del proceso (anonimizar una epicrisis) | 20 MB | 127 MB |
 | Carga del modelo (una vez por sesión, al activar NER) | — | ~0,2 s |
 | Tiempo por página (~1 000 caracteres) | 7 ms | ~30 ms (2 ms si el documento ya se analizó) |

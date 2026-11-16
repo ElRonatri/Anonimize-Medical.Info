@@ -145,6 +145,17 @@ const messages = {
       URL: 'Enlaces', IP: 'Direcciones IP', CUSTOM: 'Términos personalizados',
     },
 
+    // --- privacidad y uso responsable
+    responsibleTitle: 'Privacidad y uso responsable',
+    responsibleSubtitle: 'Antes de empezar, ten en cuenta lo siguiente:',
+    responsibleLocal: 'Todo se procesa **localmente** en este equipo; ningún documento sale del computador.',
+    responsibleSupport: 'Es una herramienta de **apoyo**, no una garantía de anonimización legal.',
+    responsibleReview: 'Revisa siempre el resultado antes de compartirlo: la detección automática y el OCR pueden omitir datos.',
+    responsibleLimits: 'Por diseño se conservan datos clínicos útiles (edad, sexo, fechas de atención, diagnósticos) que, combinados, podrían permitir reidentificar a una persona en casos raros.',
+    dontShowAgain: 'No volver a mostrar',
+    understood: 'Entendido',
+    closeDialog: 'Cerrar',
+    reviewReminder: 'Revisa el resultado antes de compartirlo: la detección automática y el OCR pueden omitir datos.',
     privacyNote: 'Todo se procesa localmente en este equipo. Revisa siempre el resultado antes de compartirlo: la detección automática puede omitir datos.',
     browserMode: 'Modo navegador: el motor de Python no está disponible. Ejecuta la aplicación con “python backend/main.py”.',
 
@@ -319,6 +330,17 @@ const messages = {
       URL: 'Links', IP: 'IP addresses', CUSTOM: 'Custom terms',
     },
 
+    // --- privacy and responsible use
+    responsibleTitle: 'Privacy and responsible use',
+    responsibleSubtitle: 'Before you start, please keep in mind:',
+    responsibleLocal: 'Everything is processed **locally** on this computer; no document ever leaves it.',
+    responsibleSupport: 'It is a **support** tool, not a guarantee of legal de-identification.',
+    responsibleReview: 'Always review the result before sharing it: automatic detection and OCR can miss data.',
+    responsibleLimits: 'By design, useful clinical data (age, sex, visit dates, diagnoses) is kept; combined, it could allow re-identifying a person in rare cases.',
+    dontShowAgain: 'Do not show again',
+    understood: 'Got it',
+    closeDialog: 'Close',
+    reviewReminder: 'Review the result before sharing it: automatic detection and OCR can miss data.',
     privacyNote: 'Everything is processed locally on this computer. Always review the result before sharing it: automatic detection may miss data.',
     browserMode: 'Browser mode: the Python engine is not available. Run the app with “python backend/main.py”.',
 

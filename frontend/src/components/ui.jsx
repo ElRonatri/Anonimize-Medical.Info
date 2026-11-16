@@ -75,7 +75,8 @@ export function Segmented({ value, onChange, options, label }) {
 export function Button({ variant = 'secondary', className, children, ...props }) {
   const styles = {
     primary:
-      'bg-teal-600 text-white hover:bg-teal-700 disabled:bg-teal-600/50 dark:bg-teal-500 dark:text-slate-950 dark:hover:bg-teal-400',
+      // teal-700 + blanco = 5,5:1 (AA); teal-600 sólo llegaba a 3,7:1.
+      'bg-teal-700 text-white hover:bg-teal-800 disabled:bg-teal-700/50 dark:bg-teal-400 dark:text-slate-950 dark:hover:bg-teal-300',
     secondary:
       'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700',
     ghost: 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',

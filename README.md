@@ -156,7 +156,7 @@ Las opciones se pueden combinar (`build.bat --ocr --tesseract`).
 | base | `build.bat` | motor de anonimización, exportación | no (usa Tesseract si el equipo lo tiene) | 73 MB |
 | ocr | `build.bat --ocr` | + RapidOCR con sus modelos ONNX | sí | 293 MB |
 | tesseract | `build.bat --tesseract` | + Tesseract portable (con los idiomas instalados) | sí | 275 MB |
-| ner | `build.bat --ner` | + detección de nombres con IA (spaCy + modelo multilingüe MIT) | no | ver CI |
+| ner | `build.bat --ner` | + detección de nombres con IA (spaCy + modelo multilingüe MIT) | no | 278 MB |
 
 \* Carpeta `dist\AnonimizeMedical` sin comprimir, medida por el CI en Windows (la variante
 tesseract con los idiomas que trae el instalador de Chocolatey; varía según los idiomas incluidos).

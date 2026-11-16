@@ -7,6 +7,22 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
+### Añadido (privacidad y uso responsable)
+- Diálogo de **primer uso** «Privacidad y uso responsable» (ES/EN): procesamiento 100 % local,
+  herramienta de *apoyo* (no garantía de anonimización legal) y revisión obligatoria del resultado,
+  más los límites por diseño. Accesible: `role="dialog"`, `aria-modal`, foco atrapado, Esc para
+  cerrar, foco devuelto al cerrar y resto de la app `inert` mientras está abierto.
+- Casilla «No volver a mostrar»: es lo **único** que se guarda (`responsibleUseDismissed`); nunca
+  contenido clínico.
+- Botón permanente «Privacidad y uso responsable» en el encabezado para reabrir el diálogo.
+- Recordatorio no bloqueante («Revisa el resultado antes de compartirlo») en la primera copia o
+  exportación de cada sesión, una sola vez.
+
+### Cambiado
+- Botón primario con contraste AA (`teal-700` + blanco, 5,4:1; antes `teal-600`, 3,7:1). Los
+  avisos informativos usan `role="status"` y los errores `role="alert"`.
+- Tamaño medido de la variante `--ner`: 278 MB (ZIP 98 MB).
+
 ### Añadido
 - Integración continua (GitHub Actions): `ruff`, `mypy`, `pytest` con cobertura mínima del 70 %
   en Python 3.10, 3.12 y 3.13, build del frontend y build de Windows con PyInstaller.
