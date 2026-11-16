@@ -28,6 +28,9 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
   verifica el paralelismo (`freeze_support`).
 
 ### Cambiado
+- **OCR int8 evaluado y descartado:** los modelos cuantizados ahorran ≤23 MB (8 % de la variante
+  `--ocr`) pero reconocen menos palabras, exponen más datos y son más lentos
+  (`scripts/eval_ocr.py`, `docs/benchmarks.md`).
 - **Sin descargas después del build:** el proceso bloquea toda conexión no local (audit hook de
   Python, proxies anulados) y a RapidOCR se le pasan siempre las rutas de los modelos empaquetados
   (antes los descargaba de internet si faltaban). La autoprueba lo verifica.
@@ -49,6 +52,8 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 - README: secciones de privacidad, limitaciones y matriz de identificadores por país.
 
 ### Corregido
+- Datos pegados por el OCR a la palabra siguiente («21/08/1985Edad:», «778201Previsión:») quedaban
+  visibles aunque se detectaban por su etiqueta. Encontrado con `scripts/eval_ocr.py`.
 - Una dirección IP al final de una oración («ref 10.0.12.7.») no se detectaba.
 - Con «Ocultar cualquier número largo» activo, un dato reconocido (p. ej. el N° de ficha) se
   marcaba como `[NUMERO]` en lugar de con su marcador específico.

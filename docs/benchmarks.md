@@ -95,3 +95,31 @@ python scripts/bench_batch.py --docs 8 --workers 1 2 3
   proceso usa ahora `núcleos / procesos` hilos (`OMP_THREAD_LIMIT`, `intra_op_num_threads`).
   Incluso con un solo proceso, Tesseract limitado a 1 hilo fue más rápido (4,2 s frente a 5,1 s
   en 3 páginas).
+
+## Bloque 5: ¿modelos OCR cuantizados (int8)?
+
+`scripts/eval_ocr.py --quantize` renderiza los PDFs ficticios de ejemplo como imágenes (110, 150 y
+200 dpi), los reconoce con RapidOCR y compara con el texto real. Métricas: CER (error por carácter;
+penaliza también el orden de lectura de tablas y columnas), **palabras** reconocidas (sin importar el
+orden) y **datos expuestos**: valores sensibles de la página que siguen visibles tras anonimizar el
+texto del OCR (la métrica que importa para la privacidad). Cuantización dinámica con
+`onnxruntime.quantization` (en tiempo de build; la aplicación nunca descarga ni convierte modelos).
+
+| Modelos | Tamaño | CER | Palabras | Datos expuestos | ms/página |
+|---|---:|---:|---:|---:|---:|
+| FP32 (original) | 31,7 MB | 16,8 % | **94,8 %** | **0** | **1 306** |
+| int8 detección | 24,5 MB | 15,1 % | 95,0 % | 1 | 1 551 |
+| int8 reconocimiento | 16,1 MB | 17,3 % | 91,1 % | 0 | 1 751 |
+| int8 ambos | 8,8 MB | 15,8 % | 89,9 % | 3 | 1 834 |
+
+**Decisión: se mantienen los modelos originales.** int8 ahorra como máximo 23 MB, un 8 % de la
+variante `--ocr` (293 MB, dominada por OpenCV ~153 MB, onnxruntime ~78 MB y numpy ~70 MB, que
+RapidOCR requiere), a cambio de reconocer hasta 5 puntos menos de palabras, **exponer más datos** y
+ser un 20-40 % más lento: en CPU las convoluciones cuantizadas no tienen kernels optimizados.
+
+**Defecto encontrado con esta evaluación** (antes de la corrección, el modelo original dejaba 3
+datos expuestos): el OCR pega campos vecinos sin espacio (`21/08/1985Edad:`, `778201Previsión:`).
+El valor se detectaba por su etiqueta, pero el límite de palabra estricto impedía ocultarlo. Ahora,
+un valor que termina en dígito sólo exige que no lo siga otro dígito, y al identificador se le
+recorta la palabra pegada. Los nombres mantienen el límite estricto. Regresión en
+`tests/test_fastmatch.py::test_ocr_glued_fields_are_still_hidden` (ambos motores).

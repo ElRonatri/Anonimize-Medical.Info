@@ -209,8 +209,13 @@ class Knowledge:
             if not lits:
                 return None
             ordered = sorted(lits, key=lambda item: len(item.value), reverse=True)
-            sources = list(dict.fromkeys(lit.source for lit in ordered))  # sin duplicados, O(n)
-            return re.compile(rf"(?<![\w])(?:{'|'.join(sources)})(?![\w])", re.IGNORECASE)
+            # Fin de cada valor: si termina en dígito sólo se exige que no siga OTRO dígito. El OCR
+            # suele pegar el campo siguiente ("21/08/1985Edad:", "778201Previsión:"); con el
+            # límite de palabra estricto esos datos quedaban visibles. Los nombres mantienen
+            # el límite estricto ("Rosa" no debe ocultarse dentro de "Rosalía").
+            alternatives = [f"(?:{lit.source}){_end_boundary(lit.value)}" for lit in ordered]
+            alternatives = list(dict.fromkeys(alternatives))  # sin duplicados, O(n)
+            return re.compile(rf"(?<![\w])(?:{'|'.join(alternatives)})", re.IGNORECASE)
 
         self.text_re = build(groups[False])
         self.digit_re = build(groups[True])
@@ -297,6 +302,11 @@ class Knowledge:
                         Literal(category, key, token, fuzzy_text_pattern(token), name_token=True))
 
 
+def _end_boundary(value: str) -> str:
+    """Límite derecho de un literal: tras un dígito basta con que no siga otro dígito."""
+    return r"(?![0-9])" if value[-1:].isdigit() else r"(?![\w])"
+
+
 def _significant(token: str) -> bool:
     plain = token.strip(".,'’-")
     return (len(plain) >= 3 and plain.lower() not in rules.PARTICLES
@@ -348,6 +358,8 @@ def parse_name(raw: str) -> list[str]:
 # --------------------------------------------------------------------------- extracción de valores rotulados
 
 _ID_VALUE_RE = re.compile(r"^[A-Za-z]{0,4}[\s.\-]?\d[\dA-Za-z.\-/]*")
+# Palabra pegada al final de un identificador por el OCR: "778201Previsión" -> "778201".
+_GLUED_WORD_RE = re.compile(r"(?<=\d)[A-ZÁÉÍÓÚÑ][a-záéíóúñ]{2,}.*$")
 _PHONE_VALUE_RE = re.compile(r"\+?\(?\d[\d\s().\-]{5,22}\d")
 
 
@@ -404,7 +416,7 @@ def _register_value(knowledge: Knowledge, rule: rules.LabelRule, value: str) -> 
     elif kind == "id":
         if _match_date(value):
             return
-        m = _ID_VALUE_RE.match(value)
+        m = _ID_VALUE_RE.match(_GLUED_WORD_RE.sub("", value))
         if m and sum(c.isdigit() for c in m.group(0)) >= 3:
             knowledge.add_value(rule.category, m.group(0).rstrip(".-/"))
     elif kind == "phone":

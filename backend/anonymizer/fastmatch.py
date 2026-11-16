@@ -155,6 +155,6 @@ class TermMatcher:
             end = compressed.original(end_index) + 1
             if start > 0 and _is_word_char(text[start - 1]):
                 continue
-            if end < n and _is_word_char(text[end]):
-                continue
+            if end < n and (text[end].isdigit() if key[-1:].isdigit() else _is_word_char(text[end])):
+                continue  # valores que terminan en dígito: basta con que no siga otro dígito (OCR)
             yield start, end, self._payloads[key]

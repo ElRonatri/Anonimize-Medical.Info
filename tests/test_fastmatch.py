@@ -137,3 +137,19 @@ def test_space_before_comma_is_tolerated(engine):
     regex = _run(text, {"output_format": "text"}, "regex", engine)["text"]
     assert "Control de [PACIENTE_1] sin novedad" in aho
     assert "PÉREZ" not in regex and "JUAN" not in regex  # la regex también oculta, pero en partes
+
+
+@pytest.mark.parametrize("eng", ["regex", "aho"])
+def test_ocr_glued_fields_are_still_hidden(eng, engine):
+    """El OCR pega campos vecinos: el valor debe ocultarse igual (detectado en scripts/eval_ocr.py)."""
+    text = ("Fecha de nacimiento: 21/08/1985Edad: 39 años\nFicha clínica: 778201Previsión: FONASA B\n"
+            "Control 21/08/1985 y ficha 778201. Hb 12.8 g/dL.")
+    out = _run(text, {"output_format": "text", "region": "all"}, eng, engine)["text"]
+    assert "21/08/1985" not in out and "778201" not in out
+    assert "Edad: 39 años" in out and "Previsión: FONASA B" in out and "12.8 g/dL" in out
+
+
+@pytest.mark.parametrize("eng", ["regex", "aho"])
+def test_names_keep_strict_word_boundary(eng, engine):
+    out = _run("Nombre: Rosa Pérez\nVisita de Rosalía y Pérezgómez.", {"output_format": "text"}, eng, engine)["text"]
+    assert "Rosalía" in out and "Pérezgómez" in out
