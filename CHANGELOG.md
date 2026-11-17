@@ -7,6 +7,21 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-17
+
+Versión centrada en **privacidad verificable**, rendimiento y accesibilidad: el CI de Windows
+comprueba con el ejecutable real que no quedan datos clínicos en el disco; procesamiento en
+paralelo y Aho-Corasick; NER opcional; aviso de uso responsable; «Ver original»; WCAG 2.1 AA.
+
+**Variantes:** `base` (73 MB), `ocr` (293 MB, RapidOCR), `tesseract` (275 MB) y `ner`
+(278 MB, nombres sin etiqueta con IA). Tamaños de la carpeta descomprimida; todas funcionan sin
+conexión y no descargan nada después de instalarse.
+
+**Al actualizar desde 1.0.0:** las preferencias (idioma, tema, opciones, lista de excepciones) se
+guardaban en el perfil de WebView2 y ahora en `%APPDATA%\AnonimizeMedical\prefs.json`; la primera
+vez se verán los valores por defecto y el aviso de uso responsable. La carpeta antigua
+`%APPDATA%\pywebview` ya no se usa y puede borrarse (contiene caché de la versión anterior).
+
 ### Añadido (UI/UX y accesibilidad)
 - **«Ver original»** en la vista resaltada: muestra en pantalla los valores originales en lugar de
   los marcadores para revisar qué se ocultó, con aviso de no compartir la vista. Desactivado por

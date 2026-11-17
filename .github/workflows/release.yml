@@ -1,6 +1,6 @@
 name: Release
 
-# Publica un release de Windows con las tres variantes y sus sumas SHA-256.
+# Publica un release de Windows con las cuatro variantes y sus sumas SHA-256.
 #
 # * Al empujar un tag vX.Y.Z (debe coincidir con __version__ y tener sección en CHANGELOG.md):
 #   compila, prueba y PUBLICA el release.
