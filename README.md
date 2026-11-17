@@ -173,15 +173,16 @@ Las opciones se pueden combinar (`build.bat --ocr --tesseract`).
 \* Carpeta `dist\AnonimizeMedical` sin comprimir, medida por el CI en Windows (la variante
 tesseract con los idiomas que trae el instalador de Chocolatey; varía según los idiomas incluidos).
 
-El CI compila y prueba las tres variantes en Windows (la autoprueba exige que el OCR de la
-variante funcione sin conexión) e informa el tamaño de cada una.
+El CI compila y prueba las cuatro variantes en Windows (la autoprueba exige que el OCR y el NER de
+la variante funcionen sin conexión, y la sonda de privacidad usa la ventana real) e informa el
+tamaño de cada una.
 
 El resultado queda en `dist\AnonimizeMedical\AnonimizeMedical.exe` (carpeta portable: puedes
 comprimirla y copiarla a otro equipo).
 
 ### Descargas, verificación y firma
 
-Cada release (tags `vX.Y.Z`) publica las tres variantes como ZIP con `SHA256SUMS.txt`. Para
+Cada release (tags `vX.Y.Z`) publica las cuatro variantes como ZIP con `SHA256SUMS.txt`. Para
 verificar una descarga: `Get-FileHash <archivo> -Algorithm SHA256` en PowerShell y compararlo con
 `SHA256SUMS.txt`. Proceso completo en [docs/release.md](docs/release.md). El ejecutable aún no
 está firmado con Authenticode; cómo activarlo: [docs/signing.md](docs/signing.md).

@@ -1,6 +1,6 @@
 # Cómo publicar un release
 
-Cada release publica las tres variantes de Windows (base, ocr, tesseract) como ZIP, junto con
+Cada release publica las cuatro variantes de Windows (base, ocr, tesseract, ner) como ZIP, junto con
 `SHA256SUMS.txt`. Todo lo hace `.github/workflows/release.yml`; nada se compila a mano.
 
 ## Pasos
@@ -10,7 +10,7 @@ Cada release publica las tres variantes de Windows (base, ocr, tesseract) como Z
 2. **CHANGELOG.** Renombra `## [Unreleased]` a `## [X.Y.Z] - AAAA-MM-DD` y deja un
    `## [Unreleased]` vacío arriba. Las notas del release salen de esa sección.
 3. **Ensayo (opcional, recomendado).** En GitHub: *Actions → Release → Run workflow* con
-   «publish» desactivado. Compila y prueba las tres variantes y deja `SHA256SUMS.txt` y los ZIP
+   «publish» desactivado. Compila y prueba las cuatro variantes y deja `SHA256SUMS.txt` y los ZIP
    como artefacto, sin publicar nada.
 4. **Tag.** Tras fusionar a `main`:
    ```bash
