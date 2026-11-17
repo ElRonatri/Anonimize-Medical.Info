@@ -20,7 +20,13 @@ TITLE="Anonimize Medical ${VERSION}"
 FILES=("$DIR"/*.zip "$DIR/SHA256SUMS.txt")
 
 tag_commit() {  # commit al que apunta el tag, o vacío si no existe
-  gh api "repos/${GITHUB_REPOSITORY:?}/commits/${TAG}" --jq .sha 2>/dev/null || true
+  # Si el tag no existe, gh imprime el JSON del error en stdout y termina con error: sólo se
+  # acepta la salida de una llamada exitosa que sea un SHA completo.
+  local out
+  if out="$(gh api "repos/${GITHUB_REPOSITORY:?}/commits/${TAG}" --jq .sha 2>/dev/null)" \
+      && [[ "$out" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "$out"
+  fi
 }
 
 check_tag_target() {
