@@ -87,13 +87,15 @@ FAKE_GH = r"""#!/usr/bin/env bash
 echo "gh $*" >> "$GH_LOG"
 case "$1 $2" in
   "release view") [ -n "$FAKE_DRAFT" ] && { echo "$FAKE_DRAFT"; exit 0; } || exit 1 ;;
-  "api repos/"*) [ -n "$FAKE_TAG_SHA" ] && { echo "$FAKE_TAG_SHA"; exit 0; } || exit 1 ;;
+  # Como el gh real: si el tag no existe, imprime el JSON del error en stdout y falla.
+  "api repos/"*) [ -n "$FAKE_TAG_SHA" ] && { echo "$FAKE_TAG_SHA"; exit 0; } \
+                 || { echo '{"message":"No commit found for SHA: v1.1.0","status":"422"}'; exit 1; } ;;
 esac
 exit 0
 """
 
 
-def publish(tmp_path, *, draft="", tag_sha="", ref="refs/heads/main", sha="abc123"):
+def publish(tmp_path, *, draft="", tag_sha="", ref="refs/heads/main", sha="a" * 40):
     import shutil
     import subprocess
 
@@ -119,7 +121,7 @@ def publish(tmp_path, *, draft="", tag_sha="", ref="refs/heads/main", sha="abc12
 
 
 def test_publish_with_existing_tag(tmp_path):
-    res, calls = publish(tmp_path, tag_sha="abc123", ref="refs/tags/v1.1.0")
+    res, calls = publish(tmp_path, tag_sha="a" * 40, ref="refs/tags/v1.1.0")
     assert res.returncode == 0, res.stderr
     assert len(calls) == 1 and "release create v1.1.0" in calls[0] and "--verify-tag" in calls[0]
     assert "SHA256SUMS.txt" in calls[0] and "windows-base.zip" in calls[0]
@@ -128,7 +130,7 @@ def test_publish_with_existing_tag(tmp_path):
 def test_publish_from_main_creates_tag_at_built_commit(tmp_path):
     res, calls = publish(tmp_path)
     assert res.returncode == 0, res.stderr
-    assert len(calls) == 1 and "--target abc123" in calls[0] and "--verify-tag" not in calls[0]
+    assert len(calls) == 1 and f"--target {'a' * 40}" in calls[0] and "--verify-tag" not in calls[0]
 
 
 def test_publish_completes_existing_draft(tmp_path):
@@ -136,14 +138,14 @@ def test_publish_completes_existing_draft(tmp_path):
     assert res.returncode == 0, res.stderr
     assert calls[0].startswith("gh release upload v1.1.0") and "--clobber" in calls[0]
     assert calls[1].startswith("gh release edit v1.1.0")
-    assert "--draft=false" in calls[1] and "--target abc123" in calls[1]
+    assert "--draft=false" in calls[1] and f"--target {'a' * 40}" in calls[1]
 
 
 @pytest.mark.parametrize("kwargs,message", [
     ({"draft": "false"}, "ya está publicado"),
     ({"ref": "refs/heads/otra-rama"}, "sólo se crea al publicar desde main"),
-    ({"tag_sha": "otro999"}, "no al commit compilado"),
-    ({"draft": "true", "tag_sha": "otro999"}, "no al commit compilado"),
+    ({"tag_sha": "b" * 40}, "no al commit compilado"),
+    ({"draft": "true", "tag_sha": "b" * 40}, "no al commit compilado"),
 ])
 def test_publish_refuses_unsafe_cases(tmp_path, kwargs, message):
     res, calls = publish(tmp_path, **kwargs)
