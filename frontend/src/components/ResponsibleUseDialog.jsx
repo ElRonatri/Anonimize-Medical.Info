@@ -36,13 +36,29 @@ export default function ResponsibleUseDialog({ open, dontShowAgain, onClose }) {
   const titleId = useId()
   const descId = useId()
 
+  // Valores actuales para el manejador de teclado a nivel de documento.
+  const latest = useRef({ checked, onClose })
+  latest.current = { checked, onClose }
+
   useEffect(() => {
     if (!open) return undefined
     setChecked(dontShowAgain)
     returnFocusRef.current = document.activeElement
-    const frame = requestAnimationFrame(() => primaryRef.current?.focus())
+    primaryRef.current?.focus()
+    // Esc se escucha en el documento: así cierra aunque el foco aún no haya entrado al diálogo
+    // (justo al abrirlo, o si quedó en un elemento que pasó a estar inerte).
+    const onDocumentKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        latest.current.onClose(latest.current.checked)
+      } else if (e.key === 'Tab' && !dialogRef.current?.contains(document.activeElement)) {
+        e.preventDefault()
+        primaryRef.current?.focus()
+      }
+    }
+    document.addEventListener('keydown', onDocumentKeyDown)
     return () => {
-      cancelAnimationFrame(frame)
+      document.removeEventListener('keydown', onDocumentKeyDown)
       // Devolver el foco a donde estaba (p. ej. el botón del encabezado).
       const target = returnFocusRef.current
       if (target && typeof target.focus === 'function' && document.contains(target)) target.focus()
@@ -53,12 +69,8 @@ export default function ResponsibleUseDialog({ open, dontShowAgain, onClose }) {
 
   const close = () => onClose(checked)
 
+  // Foco atrapado: Tab / Shift+Tab giran dentro del diálogo (Esc se maneja en el documento).
   const onKeyDown = (e) => {
-    if (e.key === 'Escape') {
-      e.preventDefault()
-      close()
-      return
-    }
     if (e.key !== 'Tab') return
     const nodes = Array.from(dialogRef.current?.querySelectorAll(FOCUSABLE) ?? [])
     if (!nodes.length) return

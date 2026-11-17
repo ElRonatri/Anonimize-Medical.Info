@@ -35,6 +35,10 @@ export default async function responsibleUse({ browser, url, fixture, check, scr
   check((await dialog.count()) === 0, 'con "No volver a mostrar" no reaparece')
 
   const headerBtn = page.getByRole('button', { name: 'Privacidad y uso responsable' })
+  // Esc inmediatamente después de abrir (antes de cualquier espera) también debe cerrar.
+  await headerBtn.click()
+  await page.keyboard.press('Escape')
+  check((await dialog.count()) === 0, 'Esc cierra aunque se presione justo al abrir')
   await headerBtn.click()
   await dialog.waitFor()
   check(await dialog.getByLabel('No volver a mostrar').isChecked(), 'reabierto desde el encabezado refleja la preferencia')

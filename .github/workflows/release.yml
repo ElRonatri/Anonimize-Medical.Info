@@ -6,6 +6,8 @@ name: Release
 #   compila, prueba y PUBLICA el release.
 # * Manualmente (Actions > Release > Run workflow) con "publish" desactivado: ensayo completo
 #   (build + autoprueba + SHA256SUMS.txt como artefacto), sin publicar nada.
+# * Manualmente con "publish" activado, desde main: además publica; si el tag vX.Y.Z no existe,
+#   GitHub lo crea en el commit compilado (ver scripts/publish_release.sh).
 #
 # La firma Authenticode no se ejecuta todavía: ver docs/signing.md.
 
@@ -15,7 +17,7 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: "Publicar el release (requiere que el tag vX.Y.Z ya exista)"
+        description: "Publicar el release (desde main crea el tag vX.Y.Z si no existe)"
         type: boolean
         default: false
 
@@ -111,6 +113,6 @@ jobs:
         if: github.ref_type == 'tag' || inputs.publish
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "v$VERSION" release/*.zip release/SHA256SUMS.txt \
-            --verify-tag --title "Anonimize Medical $VERSION" --notes-file notes.md
+        # Con tag (push) o a mano con "publish" desde main: si el tag no existe se crea en este
+        # commit; si hay un borrador vX.Y.Z (p. ej. creado en la web) se completa y publica.
+        run: bash scripts/publish_release.sh release notes.md
