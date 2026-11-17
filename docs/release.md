@@ -21,6 +21,11 @@ Cada release publica las cuatro variantes de Windows (base, ocr, tesseract, ner)
    compila las variantes, ejecuta la autoprueba de cada `.exe` (motor, exportación, red bloqueada,
    procesos en paralelo, OCR sin conexión) y publica el release con las sumas.
 
+   **Sin git local:** *Actions → Release → Run workflow* sobre `main` con «publish» activado.
+   Si el tag no existe, GitHub lo crea en el commit compilado; si ya hay un borrador `vX.Y.Z`
+   (creado en la web) se le suben los archivos y se publica. Nunca sobrescribe un release ya
+   publicado ni usa un tag que apunte a otro commit (`scripts/publish_release.sh`).
+
 ## Verificar una descarga
 
 En PowerShell:

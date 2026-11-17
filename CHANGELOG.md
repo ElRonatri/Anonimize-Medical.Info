@@ -17,6 +17,9 @@ paralelo y Aho-Corasick; NER opcional; aviso de uso responsable; «Ver original�
 (278 MB, nombres sin etiqueta con IA). Tamaños de la carpeta descomprimida; todas funcionan sin
 conexión y no descargan nada después de instalarse.
 
+**Releases:** el workflow también publica al ejecutarlo a mano desde `main` (crea el tag si no
+existe y completa un borrador creado en la web), sin necesidad de git local.
+
 **Al actualizar desde 1.0.0:** las preferencias (idioma, tema, opciones, lista de excepciones) se
 guardaban en el perfil de WebView2 y ahora en `%APPDATA%\AnonimizeMedical\prefs.json`; la primera
 vez se verán los valores por defecto y el aviso de uso responsable. La carpeta antigua
