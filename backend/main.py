@@ -234,6 +234,15 @@ def run_window(config: Config, on_loaded: Callable[[Any, Any], None] | None = No
     profile = appdata.webview_profile_dir()
     appdata.cleanup_webview_profile(profile)
     appdata.configure_webview2_environment()
+    if sys.platform == "win32":
+        try:  # el mismo módulo que usará webview.start() (queda en caché)
+            import webview.platforms.winforms as winforms
+
+            chromium = getattr(winforms, "Chromium", None)
+            if chromium is None or not appdata.harden_edgechromium(chromium):
+                logging.getLogger(__name__).warning("WebView2 sin argumentos de privacidad (motor no Chromium)")
+        except Exception as exc:
+            logging.getLogger(__name__).warning("No se pudo preparar WebView2 (%s)", type(exc).__name__)
 
     api = Api()
     window = webview.create_window(

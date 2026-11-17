@@ -88,6 +88,35 @@ def cleanup_webview_profile(path: Path | None = None, attempts: int = 10, delay:
     return False
 
 
+def harden_edgechromium(module: Any) -> bool:
+    """Añade WEBVIEW2_ARGS a las propiedades de creación que arma pywebview para WebView2.
+
+    pywebview fija `AdditionalBrowserArguments` en el código y ese valor tiene prioridad sobre la
+    variable de entorno (lo mostró la sonda en el CI: el navegador arrancaba sin estos argumentos).
+    Se envuelve `EdgeChrome.__init__` para completar el valor antes de que WebView2 se inicialice
+    (la inicialización espera a que la ventana exista). Devuelve True si se aplicó.
+    """
+    cls = getattr(module, "EdgeChrome", None)
+    if cls is None or getattr(cls.__init__, "_anonimize_hardened", False):
+        return cls is not None
+    original = cls.__init__
+
+    def init(self: Any, *args: Any, **kwargs: Any) -> None:
+        original(self, *args, **kwargs)
+        try:
+            props = self.webview.CreationProperties
+            current = str(props.AdditionalBrowserArguments or "")
+            missing = [a for a in WEBVIEW2_ARGS if a not in current.split()]
+            if missing:
+                props.AdditionalBrowserArguments = " ".join([current, *missing]).strip()
+        except Exception as exc:  # nunca impedir que la ventana abra
+            log.warning("No se pudieron fijar los argumentos de WebView2 (%s)", type(exc).__name__)
+
+    init._anonimize_hardened = True  # type: ignore[attr-defined]
+    cls.__init__ = init
+    return True
+
+
 def configure_webview2_environment(env: dict[str, str] | None = None) -> None:
     """Fija los argumentos del navegador de WebView2 (sin informes de fallos)."""
     target = os.environ if env is None else env

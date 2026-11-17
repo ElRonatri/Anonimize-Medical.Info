@@ -262,3 +262,31 @@ def test_probe_watchdog_reports_stage_instead_of_hanging(tmp_path, data_dir):
     report = json.loads((out / "probe-report.json").read_text(encoding="utf-8"))
     assert res.returncode == 4, res.stderr
     assert "esperando la ventana" in report["error"]
+
+
+def test_harden_edgechromium_appends_args_to_pywebview_props():
+    """pywebview fija AdditionalBrowserArguments en código; la variable de entorno no lo reemplaza."""
+    class Props:
+        AdditionalBrowserArguments = None
+
+    class EdgeChrome:
+        def __init__(self, form=None, window=None, cache_dir=None):
+            self.webview = types.SimpleNamespace(CreationProperties=Props())
+            self.webview.CreationProperties.AdditionalBrowserArguments = "--disable-features=ElasticOverscroll"
+
+    module = types.SimpleNamespace(EdgeChrome=EdgeChrome)
+    assert appdata.harden_edgechromium(module) and appdata.harden_edgechromium(module)  # idempotente
+    args = EdgeChrome().webview.CreationProperties.AdditionalBrowserArguments.split()
+    assert args.count("--disable-breakpad") == 1 and "--disable-crash-reporter" in args
+    assert args.count("--disable-features=ElasticOverscroll") == 1
+    assert appdata.harden_edgechromium(types.SimpleNamespace()) is False  # sin motor Chromium
+
+
+def test_harden_edgechromium_never_blocks_the_window():
+    class Broken:
+        def __init__(self):
+            self.webview = None  # CreationProperties inaccesible
+
+    module = types.SimpleNamespace(EdgeChrome=Broken)
+    appdata.harden_edgechromium(module)
+    Broken()  # no lanza: sólo registra una advertencia

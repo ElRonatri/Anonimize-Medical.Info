@@ -138,6 +138,7 @@ jobs:
           Write-Host "Navegador: $(if ($browser) { ($browser -split ' ' | Where-Object { $_ -match '^--(user-data-dir|disable-breakpad|disable-crash-reporter|disable-features)' }) -join ' ' })"
           if ($p.ExitCode -ne 0) { throw "La sonda de privacidad falló (código $($p.ExitCode))" }
           if (-not $cmdlines.Count) { throw "No se observó WebView2: la ventana no llegó a abrirse" }
+          if (-not $browser -or $browser -notmatch "--disable-breakpad") { throw "WebView2 arrancó sin --disable-breakpad" }
           if ($leftover -eq $false) { Write-Host "(El cierre abrupto no dejó perfil: no se pudo probar la limpieza al iniciar)" }
           Start-Sleep 3
           if (Test-Path $wvProfile) { throw "El perfil de WebView2 sigue en disco tras cerrar" }
