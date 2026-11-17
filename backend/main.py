@@ -53,6 +53,7 @@ class Config:
     probe_sentinel: str = ""
     probe_crash: bool = False
     probe_hold: float = 5.0
+    probe_deadline: float = 600.0
 
 
 def dev_mode_allowed(requested: bool, frozen: bool) -> bool:
@@ -80,13 +81,15 @@ def parse_args(argv: list[str] | None = None) -> Config:
     probe.add_argument("--probe-sentinel", default="", help="nombre sintético único, p. ej. 'Zxqwerty Centinela Qwmzk'")
     probe.add_argument("--probe-crash", action="store_true", help="terminar de golpe al final (simula un fallo)")
     probe.add_argument("--probe-hold", type=float, default=5.0, help="segundos con la ventana abierta al final")
+    probe.add_argument("--probe-deadline", type=float, default=600.0, help="plazo máximo de la sonda (segundos)")
     args = parser.parse_args(argv)
     if args.privacy_probe and len(args.probe_sentinel.split()) < 3:
         parser.error("--privacy-probe requiere --probe-sentinel con nombre y dos apellidos")
     return Config(dev=dev_mode_allowed(args.dev, is_frozen()), url=args.url, self_test=args.self_test,
                   self_test_report=args.self_test_report, expect_ocr=args.expect_ocr,
                   expect_ner=args.expect_ner, privacy_probe=args.privacy_probe,
-                  probe_sentinel=args.probe_sentinel, probe_crash=args.probe_crash, probe_hold=args.probe_hold)
+                  probe_sentinel=args.probe_sentinel, probe_crash=args.probe_crash, probe_hold=args.probe_hold,
+                  probe_deadline=args.probe_deadline)
 
 
 # --------------------------------------------------------------------------- autoprueba
@@ -286,7 +289,8 @@ def main(argv: list[str] | None = None) -> int:
         import privacy_probe
 
         return privacy_probe.run(config, config.privacy_probe, config.probe_sentinel, run_window,
-                                 crash=config.probe_crash, hold=config.probe_hold)
+                                 crash=config.probe_crash, hold=config.probe_hold,
+                                 deadline=config.probe_deadline)
 
     run_window(config)
     return 0

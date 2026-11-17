@@ -55,7 +55,7 @@ Como el modo privado no conserva `localStorage`, las preferencias pasaron al bac
 | OCR con Tesseract | Imagen por la entrada estándar, texto por la salida estándar: sin archivos. |
 | OCR con RapidOCR | En memoria. |
 | PDF de entrada | Se leen en memoria (los arrastrados a la ventana llegan como datos, no se copian a disco). |
-| Procesos en paralelo (*spawn*) | Reciben los datos por tuberías de `multiprocessing`; sin archivos. |
+| Procesos en paralelo (*spawn*) | Reciben los datos por tuberías de `multiprocessing`; sin archivos. **Hallazgo de la sonda en el CI:** si el proceso principal moría de golpe, los procesos de extracción quedaban vivos (con documentos en memoria). Ahora cada uno vigila al principal y termina con él (`parallel.watch_parent`); prueba con control negativo en `tests/test_parallel.py` y verificación en el CI de Windows. |
 | Exportación DOCX/JSON | Se genera en memoria y se escribe sólo en el destino elegido. |
 | Logs | Sólo a la consola (el `.exe` no tiene) y sin contenido clínico: tipo de error y línea. |
 | Volcados de Python | No se usa `faulthandler`; WER sin heap (arriba). |
@@ -100,7 +100,9 @@ disco»), con el ejecutable congelado de cada variante y la ventana real de WebV
    centinela, lo anonimiza y copia; procesa dos PDF escaneados sintéticos por **OCR en procesos
    paralelos**; exporta md/txt/docx/json, y cierra la ventana. Mientras corre, el CI registra las
    líneas de comando de los procesos `msedgewebview2.exe` (perfil usado, argumentos de fallos).
-5. Exige: resultados y exportaciones sin el centinela, perfil borrado al cerrar, y **ningún
+5. Tras el cierre abrupto exige que **no quede ningún proceso `AnonimizeMedical` vivo**. La sonda
+   tiene un plazo máximo (`--probe-deadline`) e informa en qué etapa quedó si algo se cuelga.
+6. Exige: resultados y exportaciones sin el centinela, perfil borrado al cerrar, y **ningún
    archivo con el centinela** (UTF-8 o UTF-16, mayúsculas o minúsculas) en `%TEMP%`,
    `%LOCALAPPDATA%` y `%APPDATA%` (archivos modificados desde el inicio de la prueba) ni en las
    carpetas de la aplicación (completas). El informe de la sonda nunca incluye el centinela.

@@ -35,6 +35,8 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
   Windows Error Reporting sin el heap del proceso (`WerSetFlags`).
 - Preferencias en `%APPDATA%\AnonimizeMedical\prefs.json`, escritas por el backend con una lista
   cerrada de claves y tipos: cualquier otra cosa se descarta.
+- Los procesos de extracción en paralelo terminan si el proceso principal muere (antes quedaban
+  vivos, con documentos en memoria, tras un cierre abrupto; lo detectó la sonda en el CI).
 - Sonda `--privacy-probe` y paso de CI en Windows: con el `.exe` real, un nombre centinela, OCR en
   procesos paralelos, exportación y un cierre abrupto simulado, busca el centinela (UTF-8/UTF-16)
   en `%TEMP%`, `%LOCALAPPDATA%` y `%APPDATA%`. Documentado en `docs/privacidad-en-disco.md`.

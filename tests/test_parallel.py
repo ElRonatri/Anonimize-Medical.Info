@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -238,3 +240,58 @@ def test_killed_worker_is_recovered(api, scanned):
     assert api._pool is None  # descartado; el próximo lote crea uno nuevo
     second = run_job(api, api.start_batch(files[:2], {"max_workers": 2})["job_id"])[0]
     assert all(i["status"] == "done" for i in second["items"])
+
+
+ORPHAN_SCRIPT = r"""
+import multiprocessing as mp, os, sys, time
+sys.path.insert(0, sys.argv[1])
+from anonymizer.parallel import watch_parent
+
+def child():
+    watch_parent()
+    time.sleep(120)
+
+def parent(q):
+    c = mp.get_context("spawn").Process(target=child)
+    c.start()
+    q.put(c.pid)
+    time.sleep(1.5)  # el hijo ya está vigilando
+    os._exit(3)      # cierre abrupto: sin cerrar el pool ni esperar a los hijos
+
+def alive(pid):
+    try:
+        with open(f"/proc/{pid}/status") as f:
+            return "\nState:\tZ" not in f.read()
+    except FileNotFoundError:
+        return False
+
+if __name__ == "__main__":
+    ctx = mp.get_context("spawn")
+    q = ctx.Queue()
+    p = ctx.Process(target=parent, args=(q,))
+    p.start()
+    pid = q.get(timeout=60)
+    p.join(60)
+    for _ in range(100):
+        if not alive(pid):
+            print("child-exited")
+            break
+        time.sleep(0.1)
+    else:
+        print("child-alive")
+        os.kill(pid, 9)
+"""
+
+
+@pytest.mark.skipif(not Path("/proc/self/status").exists(), reason="usa /proc para ver el estado del hijo")
+def test_workers_exit_when_main_process_dies(tmp_path):
+    """Sin la vigilancia, un hijo de extracción quedaba vivo (con documentos en memoria) tras un fallo."""
+    script = tmp_path / "orphan.py"
+    script.write_text(ORPHAN_SCRIPT, encoding="utf-8")
+    backend = Path(__file__).resolve().parent.parent / "backend"
+    out = subprocess.run([sys.executable, str(script), str(backend)], capture_output=True, text=True, timeout=120)
+    assert out.stdout.strip() == "child-exited", out.stdout + out.stderr
+
+
+def test_watch_parent_is_noop_in_main_process():
+    assert parallel.watch_parent() is None

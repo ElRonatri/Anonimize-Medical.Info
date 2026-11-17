@@ -23,6 +23,7 @@ import io
 import json
 import logging
 import os
+import threading
 import time
 import zipfile
 from collections.abc import Callable
@@ -119,7 +120,7 @@ def _profile_snapshot(profile: Path) -> dict[str, Any]:
 
 
 def run(config: Any, out_dir: Path, sentinel: str, run_window: Callable[..., None],
-        crash: bool = False, hold: float = 5.0) -> int:
+        crash: bool = False, hold: float = 5.0, deadline: float = 600.0) -> int:
     import appdata
     from anonymizer import ocr
     from anonymizer.exporters import FORMATS, export_bytes
@@ -131,11 +132,24 @@ def run(config: Any, out_dir: Path, sentinel: str, run_window: Callable[..., Non
     report: dict[str, Any] = {"profile_dir": str(profile), "prefs_file": str(appdata.prefs_path()),
                               "crash_simulated": crash, "checks": {}}
     checks: dict[str, bool] = report["checks"]
+    report["stage"] = "esperando la ventana"
+
+    # Plazo máximo: si algo se cuelga (la ventana no carga, WebView2 no responde), la sonda
+    # termina con un informe que dice en qué etapa quedó, en lugar de bloquear el CI.
+    def expire() -> None:
+        report["error"] = f"plazo de {deadline:.0f} s agotado en la etapa: {report['stage']}"
+        _write(out_dir, report)
+        os._exit(4)
+
+    watchdog = threading.Timer(deadline, expire)
+    watchdog.daemon = True
+    watchdog.start()
 
     def drive(window: Any, api: Any) -> None:
         try:
             text = PROBE_TEXT.format(sentinel=sentinel, last=sentinel.split()[-2])
             script = UI_SCRIPT.replace("__TEXT__", json.dumps(text)).replace("__TOKEN__", json.dumps(token))
+            report["stage"] = "interfaz (texto pegado)"
             window.evaluate_js(script)
             deadline = time.monotonic() + 90
             ui: Any = None
@@ -147,6 +161,7 @@ def run(config: Any, out_dir: Path, sentinel: str, run_window: Callable[..., Non
             checks["ui_result_anonymized"] = bool(ui and ui.get("ok") and not ui.get("sentinel_in_result"))
 
             # PDF escaneado por OCR, en procesos paralelos (spawn), igual que un lote real.
+            report["stage"] = "OCR en procesos paralelos"
             engines = ocr.available_engines()
             report["ocr_engines"] = engines
             pdf = base64.b64encode(_scanned_pdf(sentinel)).decode()
@@ -170,6 +185,7 @@ def run(config: Any, out_dir: Path, sentinel: str, run_window: Callable[..., Non
             checks["ocr_output_anonymized"] = all(token not in t for t in outputs)
 
             # Exportación (lo que haría «Guardar como»), con el resultado del texto pegado.
+            report["stage"] = "exportación"
             pasted = api.process_text(text, {"output_format": "markdown"})
             export_dir = out_dir / "export"
             export_dir.mkdir(exist_ok=True)
@@ -183,6 +199,7 @@ def run(config: Any, out_dir: Path, sentinel: str, run_window: Callable[..., Non
             checks["exports_anonymized"] = not leaked
 
             report["profile_during_run"] = _profile_snapshot(profile)
+            report["stage"] = "ventana abierta (muestreo del CI)"
             time.sleep(hold)  # el CI inspecciona los procesos de WebView2 mientras tanto
         except Exception as exc:  # el informe debe escribirse igual
             report["error"] = type(exc).__name__
@@ -194,6 +211,8 @@ def run(config: Any, out_dir: Path, sentinel: str, run_window: Callable[..., Non
             window.destroy()
 
     run_window(config, on_loaded=drive)
+    report["stage"] = "cerrada"
+    watchdog.cancel()
     time.sleep(1.0)
     report["profile_after_close"] = _profile_snapshot(profile)
     checks["profile_removed_on_close"] = not profile.exists()

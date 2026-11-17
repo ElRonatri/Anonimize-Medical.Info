@@ -27,7 +27,7 @@ from typing import Any
 
 from .document import Document
 from .extract import ExtractionError, load_bytes
-from .privacy import log_exception
+from .privacy import limit_crash_dumps, log_exception
 
 log = logging.getLogger(__name__)
 
@@ -78,6 +78,30 @@ def _init_worker(progress_queue: Any, cancelled: Any, ocr_threads: int) -> None:
     # Repartir los núcleos: N procesos con OCR multihilo sin límite se estorban entre sí
     # (medido: Tesseract pasa de ~1 s a más de 180 s por página con 2 procesos).
     ocr.set_thread_limit(ocr_threads)
+    limit_crash_dumps()
+    watch_parent()
+
+
+def watch_parent(exit: Callable[[int], None] = os._exit) -> threading.Thread | None:
+    """Termina este proceso hijo si el principal muere (cierre abrupto, fallo, administrador de tareas).
+
+    Sin esto, los hijos de ProcessPoolExecutor pueden quedar vivos —con documentos en memoria—
+    cuando el proceso principal termina sin cerrar el pool (lo detectó la sonda de privacidad en
+    el CI de Windows). Espera el «sentinel» del proceso padre: no consume CPU.
+    """
+    parent = mp.parent_process()
+    if parent is None:
+        return None
+
+    def wait() -> None:
+        from multiprocessing.connection import wait as wait_for
+
+        wait_for([parent.sentinel])
+        exit(0)
+
+    thread = threading.Thread(target=wait, name="watch-parent", daemon=True)
+    thread.start()
+    return thread
 
 
 def ocr_threads_per_worker(workers: int) -> int:

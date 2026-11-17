@@ -243,3 +243,22 @@ def test_probe_requires_full_sentinel():
         main.parse_args(["--privacy-probe", "x", "--probe-sentinel", "Solo"])
     cfg = main.parse_args(["--privacy-probe", "x", "--probe-sentinel", SENTINEL, "--probe-crash"])
     assert cfg.privacy_probe == Path("x") and cfg.probe_crash
+
+
+def test_probe_watchdog_reports_stage_instead_of_hanging(tmp_path, data_dir):
+    """Si la ventana nunca carga, la sonda termina sola con un informe (antes colgaba el CI 6 h)."""
+    import subprocess
+
+    out = tmp_path / "sonda"
+    code = (
+        f"import sys, time; sys.path.insert(0, {str(ROOT / 'backend')!r})\n"
+        "import main, privacy_probe\n"
+        "def never_loads(config, on_loaded=None): time.sleep(60)\n"
+        f"privacy_probe.run(main.parse_args([]), __import__('pathlib').Path({str(out)!r}), {SENTINEL!r},"
+        " never_loads, deadline=1)\n"
+    )
+    res = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60,
+                         env={**os.environ, appdata.ENV_DATA_DIR: str(data_dir)})
+    report = json.loads((out / "probe-report.json").read_text(encoding="utf-8"))
+    assert res.returncode == 4, res.stderr
+    assert "esperando la ventana" in report["error"]
