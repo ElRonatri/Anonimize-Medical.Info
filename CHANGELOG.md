@@ -41,6 +41,8 @@ vez se verán los valores por defecto y el aviso de uso responsable. La carpeta 
   botones, con `aria-current` y «Quitar: <documento>».
 - Menú Exportar con el patrón ARIA de menú: flechas, Inicio/Fin, Esc devuelve el foco, opción de
   nombres genéricos como `menuitemcheckbox`.
+- El diálogo de uso responsable se cierra con Esc aunque se presione justo al abrirlo (antes la
+  tecla se perdía si el foco aún no había entrado al diálogo; lo detectó la prueba e2e en el CI).
 - `aria-pressed` en selectores segmentados y vista/edición; nombre accesible en el botón para
   cerrar avisos; íconos decorativos con `aria-hidden`; resultado enfocable para leer con teclado.
 
