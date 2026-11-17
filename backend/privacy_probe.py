@@ -214,6 +214,8 @@ def run(config: Any, out_dir: Path, sentinel: str, run_window: Callable[..., Non
     report["stage"] = "cerrada"
     watchdog.cancel()
     time.sleep(1.0)
+    report["webview2"] = {k: v for k, v in appdata.WEBVIEW2_STATUS.items() if k != "hooked_class"}
+    report["webview2"]["args"] = list(appdata.WEBVIEW2_ARGS)
     report["profile_after_close"] = _profile_snapshot(profile)
     checks["profile_removed_on_close"] = not profile.exists()
     prefs = appdata.prefs_path()

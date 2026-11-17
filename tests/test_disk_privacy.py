@@ -264,29 +264,54 @@ def test_probe_watchdog_reports_stage_instead_of_hanging(tmp_path, data_dir):
     assert "esperando la ventana" in report["error"]
 
 
-def test_harden_edgechromium_appends_args_to_pywebview_props():
-    """pywebview fija AdditionalBrowserArguments en código; la variable de entorno no lo reemplaza."""
+def _fake_edgechrome():
     class Props:
         AdditionalBrowserArguments = None
 
-    class EdgeChrome:
-        def __init__(self, form=None, window=None, cache_dir=None):
-            self.webview = types.SimpleNamespace(CreationProperties=Props())
-            self.webview.CreationProperties.AdditionalBrowserArguments = "--disable-features=ElasticOverscroll"
+    class EdgeChrome:  # mismo orden que pywebview: props -> self.form -> EnsureCoreWebView2Async
+        def __init__(self, form="formulario", broken=False):
+            self.webview = types.SimpleNamespace(CreationProperties=None if broken else Props())
+            if not broken:
+                self.webview.CreationProperties.AdditionalBrowserArguments = "--disable-features=ElasticOverscroll"
+            self.form = form
+            self.args_at_init = (None if broken else self.webview.CreationProperties.AdditionalBrowserArguments)
 
+    return EdgeChrome
+
+
+def test_harden_edgechromium_sets_args_before_webview2_reads_them(monkeypatch):
+    """pywebview fija AdditionalBrowserArguments en código; la variable de entorno no lo reemplaza."""
+    monkeypatch.setattr(appdata, "WEBVIEW2_STATUS", {"hooked": False, "applied": False})
+    EdgeChrome = _fake_edgechrome()
     module = types.SimpleNamespace(EdgeChrome=EdgeChrome)
     assert appdata.harden_edgechromium(module) and appdata.harden_edgechromium(module)  # idempotente
-    args = EdgeChrome().webview.CreationProperties.AdditionalBrowserArguments.split()
+    chrome = EdgeChrome()
+    args = chrome.args_at_init.split()  # ya completos ANTES de EnsureCoreWebView2Async
     assert args.count("--disable-breakpad") == 1 and "--disable-crash-reporter" in args
     assert args.count("--disable-features=ElasticOverscroll") == 1
+    assert chrome.form == "formulario" and appdata.WEBVIEW2_STATUS["applied"]
     assert appdata.harden_edgechromium(types.SimpleNamespace()) is False  # sin motor Chromium
 
 
-def test_harden_edgechromium_never_blocks_the_window():
-    class Broken:
-        def __init__(self):
-            self.webview = None  # CreationProperties inaccesible
+def test_harden_edgechromium_never_blocks_the_window(monkeypatch):
+    monkeypatch.setattr(appdata, "WEBVIEW2_STATUS", {"hooked": False, "applied": False})
+    EdgeChrome = _fake_edgechrome()
+    appdata.harden_edgechromium(types.SimpleNamespace(EdgeChrome=EdgeChrome))
+    assert EdgeChrome(broken=True).form == "formulario"  # no lanza: sólo registra una advertencia
+    assert appdata.WEBVIEW2_STATUS["error"] == "AttributeError"
 
-    module = types.SimpleNamespace(EdgeChrome=Broken)
-    appdata.harden_edgechromium(module)
-    Broken()  # no lanza: sólo registra una advertencia
+
+def test_pywebview_assigns_form_between_props_and_webview2_init():
+    """La propiedad `form` sólo sirve si pywebview mantiene este orden en EdgeChrome.__init__."""
+    import importlib.util
+
+    spec = importlib.util.find_spec("webview")
+    if spec is None or not spec.submodule_search_locations:
+        pytest.skip("pywebview no instalado")
+    source = Path(spec.submodule_search_locations[0], "platforms", "edgechromium.py").read_text(encoding="utf-8")
+    init = source[source.index("def __init__(self, form"):]
+    init = init[:init.index("\n    def ")]
+    props = init.index("self.webview.CreationProperties = props")
+    form = init.index("self.form = form")
+    ensure = init.index("EnsureCoreWebView2Async")
+    assert props < form < ensure

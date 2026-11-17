@@ -88,32 +88,47 @@ def cleanup_webview_profile(path: Path | None = None, attempts: int = 10, delay:
     return False
 
 
+# Estado observable de la configuración de WebView2 (lo informa la sonda de privacidad).
+WEBVIEW2_STATUS: dict[str, Any] = {"hooked": False, "applied": False}
+
+
+def _append_args(props: Any) -> None:
+    current = str(props.AdditionalBrowserArguments or "")
+    missing = [a for a in WEBVIEW2_ARGS if a not in current.split()]
+    if missing:
+        props.AdditionalBrowserArguments = " ".join([current, *missing]).strip()
+    WEBVIEW2_STATUS["applied"] = True
+
+
 def harden_edgechromium(module: Any) -> bool:
     """Añade WEBVIEW2_ARGS a las propiedades de creación que arma pywebview para WebView2.
 
-    pywebview fija `AdditionalBrowserArguments` en el código y ese valor tiene prioridad sobre la
-    variable de entorno (lo mostró la sonda en el CI: el navegador arrancaba sin estos argumentos).
-    Se envuelve `EdgeChrome.__init__` para completar el valor antes de que WebView2 se inicialice
-    (la inicialización espera a que la ventana exista). Devuelve True si se aplicó.
+    pywebview fija `AdditionalBrowserArguments` en el código, ese valor tiene prioridad sobre la
+    variable de entorno, y WebView2 lo lee al llamar a `EnsureCoreWebView2Async` al final de
+    `EdgeChrome.__init__` (lo mostró la sonda en el CI: modificarlo después no surte efecto).
+    El primer punto entre `self.webview.CreationProperties = props` y esa llamada es
+    `self.form = form`: se instala una propiedad `form` que completa los argumentos al asignarse.
+    `tests/test_disk_privacy.py` verifica ese orden en el código de pywebview instalado.
     """
     cls = getattr(module, "EdgeChrome", None)
-    if cls is None or getattr(cls.__init__, "_anonimize_hardened", False):
-        return cls is not None
-    original = cls.__init__
+    if cls is None:
+        return False
+    if WEBVIEW2_STATUS.get("hooked_class") is cls:
+        return True
 
-    def init(self: Any, *args: Any, **kwargs: Any) -> None:
-        original(self, *args, **kwargs)
+    def get_form(self: Any) -> Any:
+        return self.__dict__.get("_anonimize_form")
+
+    def set_form(self: Any, value: Any) -> None:
+        self.__dict__["_anonimize_form"] = value
         try:
-            props = self.webview.CreationProperties
-            current = str(props.AdditionalBrowserArguments or "")
-            missing = [a for a in WEBVIEW2_ARGS if a not in current.split()]
-            if missing:
-                props.AdditionalBrowserArguments = " ".join([current, *missing]).strip()
+            _append_args(self.webview.CreationProperties)
         except Exception as exc:  # nunca impedir que la ventana abra
+            WEBVIEW2_STATUS["error"] = type(exc).__name__
             log.warning("No se pudieron fijar los argumentos de WebView2 (%s)", type(exc).__name__)
 
-    init._anonimize_hardened = True  # type: ignore[attr-defined]
-    cls.__init__ = init
+    cls.form = property(get_form, set_form)
+    WEBVIEW2_STATUS.update(hooked=True, hooked_class=cls)
     return True
 
 
