@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from typing import Any
 
 from .detector import Options, Redactor, build_knowledge
 from .document import Document
@@ -10,7 +11,7 @@ from .lang import SUPPORTED_LANGUAGES, detect_language
 from .render import render, strip_repeated_lines
 
 
-def anonymize_document(doc: Document, options: dict | Options | None = None) -> dict:
+def anonymize_document(doc: Document, options: dict[str, Any] | Options | None = None) -> dict[str, Any]:
     started = time.perf_counter()
     opts = options if isinstance(options, Options) else Options.from_dict(options)
 
@@ -19,7 +20,7 @@ def anonymize_document(doc: Document, options: dict | Options | None = None) -> 
     lang = opts.language if opts.language in SUPPORTED_LANGUAGES else detected
 
     # La detección usa SIEMPRE el texto completo (los encabezados suelen traer el nombre).
-    knowledge = build_knowledge(full_text, opts)
+    knowledge = build_knowledge(full_text, opts, lang)
     redactor = Redactor(knowledge, opts, lang)
 
     view = strip_repeated_lines(doc) if opts.remove_repeated else doc
@@ -38,6 +39,7 @@ def anonymize_document(doc: Document, options: dict | Options | None = None) -> 
         "entities": entities,
         "replacements": sum(e["count"] for e in entities),
         "warnings": list(doc.warnings),
+        "ner": knowledge.ner_summary,
         "characters": len(full_text),
         "elapsed_ms": int((time.perf_counter() - started) * 1000),
     }

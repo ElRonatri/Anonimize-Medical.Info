@@ -10,6 +10,7 @@ import io
 import json
 import re
 from datetime import datetime, timezone
+from typing import Any
 
 FORMATS = {
     "md": ("Markdown", ".md"),
@@ -28,7 +29,7 @@ _PAGE_MARK_RE = re.compile(r"^\*([^*]+)\*$")
 _ESCAPED_PIPE = "\u0000"
 
 
-def export_bytes(fmt: str, text: str, meta: dict | None = None) -> bytes:
+def export_bytes(fmt: str, text: str, meta: dict[str, Any] | None = None) -> bytes:
     meta = meta or {}
     if fmt == "docx":
         return to_docx(text, markdown=meta.get("format", "markdown") == "markdown")
@@ -39,7 +40,7 @@ def export_bytes(fmt: str, text: str, meta: dict | None = None) -> bytes:
 
 # --------------------------------------------------------------------------- JSON
 
-def to_json(text: str, meta: dict) -> str:
+def to_json(text: str, meta: dict[str, Any]) -> str:
     entities = [
         {"placeholder": e.get("placeholder"), "category": e.get("category"), "count": e.get("count", 0)}
         for e in meta.get("entities", [])
@@ -73,7 +74,7 @@ def to_docx(text: str, markdown: bool = True) -> bytes:
 
     accent = RGBColor(0x0F, 0x76, 0x6E)
 
-    def add_runs(paragraph, content: str, bold: bool = False, italic: bool = False):
+    def add_runs(paragraph: Any, content: str, bold: bool = False, italic: bool = False) -> None:
         parts = _BOLD_RE.split(content) if markdown else [content]
         for part in parts:
             if not part:
@@ -95,7 +96,7 @@ def to_docx(text: str, markdown: bool = True) -> bytes:
     i = 0
     paragraph_lines: list[str] = []
 
-    def flush_paragraph():
+    def flush_paragraph() -> None:
         if paragraph_lines:
             p = doc.add_paragraph()
             for n, line in enumerate(paragraph_lines):
@@ -154,10 +155,10 @@ def to_docx(text: str, markdown: bool = True) -> bytes:
                 width = max(len(r) for r in rows)
                 table = doc.add_table(rows=len(rows), cols=width)
                 table.style = "Table Grid"
-                for r, row in enumerate(rows):
+                for r, cells in enumerate(rows):
                     for c in range(width):
                         cell = table.cell(r, c)
-                        add_runs(cell.paragraphs[0], row[c] if c < len(row) else "", bold=(r == 0))
+                        add_runs(cell.paragraphs[0], cells[c] if c < len(cells) else "", bold=(r == 0))
                 doc.add_paragraph()
             continue
 

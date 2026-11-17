@@ -1,0 +1,13 @@
+{
+  "country": "Pakistán",
+  "codes": [
+    "PK"
+  ],
+  "patterns": [
+    {
+      "label": "CNIC_PK",
+      "name": "CNIC",
+      "regex": "${B}\\d{5}-\\d{7}-\\d${E}"
+    }
+  ]
+}

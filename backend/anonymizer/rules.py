@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import re
-from functools import lru_cache
+from collections.abc import Iterable
 from dataclasses import dataclass
+from functools import lru_cache
 
 # --------------------------------------------------------------------------- utilidades
 
@@ -186,11 +187,11 @@ _SEP_REQUIRED = _NUMBER_MARK + r"\s*(?:[:：](?:\s*\|)?|\|)\s*"
 _SEP_OPTIONAL = _NUMBER_MARK + r"\s*(?:[:：#](?:\s*\|)?|\||-\s|\s)\s*"
 
 
-def _alternation(labels) -> str:
+def _alternation(labels: Iterable[str]) -> str:
     return "|".join(sorted(labels, key=len, reverse=True))
 
 
-def compile_rule(rule: LabelRule) -> re.Pattern:
+def compile_rule(rule: LabelRule) -> re.Pattern[str]:
     sep = _SEP_REQUIRED if rule.colon_required else _SEP_OPTIONAL
     pattern = rf"(?<![\w]){'(?:' + _alternation(rule.labels) + ')'}(?![\w]){sep}"
     # Las reglas se aplican sobre el texto completo YA EN MINÚSCULAS (ver `lower_same_length`),
@@ -217,7 +218,7 @@ COMPILED_RULES = [(rule, compile_rule(rule)) for rule in LABEL_RULES]
 
 
 @lru_cache(maxsize=8)
-def combined_rules(professionals: bool, addresses: bool) -> tuple[re.Pattern, tuple[LabelRule, ...]]:
+def combined_rules(professionals: bool, addresses: bool) -> tuple[re.Pattern[str], tuple[LabelRule, ...]]:
     """Todas las reglas activas en UNA expresión precompilada (una sola pasada por el texto).
 
     Cada regla es un grupo con nombre (r0, r1, ...) y `match.lastgroup` indica cuál coincidió.
@@ -261,12 +262,14 @@ DATE_PATTERNS = [
     re.compile(rf"\b\d{{1,2}}\s+de\s+(?:{MONTHS_ES})(?:\s+(?:de|del)\s+\d{{4}})?\b", re.IGNORECASE),
     re.compile(rf"\b(?:{MONTHS_ES})\s+(?:de|del)\s+\d{{4}}\b", re.IGNORECASE),
     re.compile(rf"\b(?:{MONTHS_EN}|{MONTHS_ABBR})\.?\s+\d{{1,2}}(?:st|nd|rd|th)?,?\s+\d{{4}}\b", re.IGNORECASE),
-    re.compile(rf"\b\d{{1,2}}(?:st|nd|rd|th)?[\s\-/](?:{MONTHS_EN}|{MONTHS_ES}|{MONTHS_ABBR})\.?[\s\-/,]+\d{{2,4}}\b", re.IGNORECASE),
+    re.compile(rf"\b\d{{1,2}}(?:st|nd|rd|th)?[\s\-/](?:{MONTHS_EN}|{MONTHS_ES}|{MONTHS_ABBR})\.?"
+               rf"[\s\-/,]+\d{{2,4}}\b", re.IGNORECASE),
 ]
 
 EMAIL_RE = re.compile(r"(?<![\w.+-])[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 URL_RE = re.compile(r"\b(?:https?://|www\.)[^\s<>\]\)\|]+", re.IGNORECASE)
-IP_RE = re.compile(r"(?<![\d.])(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?![\d.])")
+# (?!\d|\.\d): una IP al final de una oración ("ref 10.0.12.7.") también se detecta.
+IP_RE = re.compile(r"(?<![\d.])(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?!\d|\.\d)")
 
 ID_PATTERNS = [
     # RUT / RUN chileno: 12.345.678-9 ó 12345678-K
@@ -299,7 +302,8 @@ ADDRESS_PATTERNS = [
 ]
 
 _NAME_PIECE = rf"[{UPPER}][{LETTER}'’\-]+"
-_NAME_SEQ = rf"{_NAME_PIECE}(?:[ \t]+(?:(?:de|del|la|las|los|van|von|da|di)[ \t]+)?(?:{_NAME_PIECE}|[{UPPER}]\.)){{0,4}}"
+_PARTICLE = r"(?:de|del|la|las|los|van|von|da|di)"
+_NAME_SEQ = rf"{_NAME_PIECE}(?:[ \t]+(?:{_PARTICLE}[ \t]+)?(?:{_NAME_PIECE}|[{UPPER}]\.)){{0,4}}"
 
 PROFESSIONAL_PATTERNS = [
     re.compile(rf"(?<![\w])(?:Dr|Dra|Dres|Prof|Lic|Enf|Klgo|Klga|E\.U|T\.M|Mg|Ps|Nut)\.[ \t]*(?P<name>{_NAME_SEQ})"),
@@ -310,5 +314,6 @@ PROFESSIONAL_PATTERNS = [
 PERSON_PATTERNS = [
     re.compile(rf"(?<![\w])(?:Sr|Sra|Srta|Sres|Mr|Mrs|Ms|Mx)\.?[ \t]+(?P<name>{_NAME_SEQ})"),
     re.compile(rf"(?<![\w])(?:Don|Doña|Miss|Señora?)[ \t]+(?P<name>{_NAME_SEQ})"),
-    re.compile(rf"(?<![\w])(?:[Pp]aciente\s+de\s+nombre|[Pp]atient\s+named|[Ss]e\s+llama|[Ll]lamad[oa])[ \t]+(?P<name>{_NAME_SEQ})"),
+    re.compile(rf"(?<![\w])(?:[Pp]aciente\s+de\s+nombre|[Pp]atient\s+named|[Ss]e\s+llama|[Ll]lamad[oa])"
+               rf"[ \t]+(?P<name>{_NAME_SEQ})"),
 ]

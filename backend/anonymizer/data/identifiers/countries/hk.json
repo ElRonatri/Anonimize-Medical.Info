@@ -1,0 +1,13 @@
+{
+  "country": "Hong Kong",
+  "codes": [
+    "HK"
+  ],
+  "patterns": [
+    {
+      "label": "HKID_HK",
+      "name": "HKID",
+      "regex": "${B}[A-Z]{1,2}\\d{6}\\([0-9A]\\)"
+    }
+  ]
+}

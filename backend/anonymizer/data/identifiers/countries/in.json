@@ -1,0 +1,19 @@
+{
+  "country": "India",
+  "codes": [
+    "IN"
+  ],
+  "patterns": [
+    {
+      "label": "AADHAAR_IN",
+      "name": "Aadhaar",
+      "regex": "${B}[2-9]\\d{3}[ -]?\\d{4}[ -]?\\d{4}${E}",
+      "validator": "aadhaar_in"
+    },
+    {
+      "label": "PAN_IN",
+      "name": "PAN",
+      "regex": "${B}[A-Z]{3}[ABCFGHLJPT][A-Z]\\d{4}[A-Z]${E}"
+    }
+  ]
+}

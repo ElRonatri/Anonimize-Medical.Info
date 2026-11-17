@@ -12,6 +12,7 @@ PLACEHOLDERS: dict[str, dict[str, str]] = {
         "PATIENT": "PACIENTE",
         "PERSON": "PERSONA",
         "PROFESSIONAL": "PROFESIONAL",
+        "ORGANIZATION": "ORGANIZACION",
         "ID": "ID",
         "RECORD": "N_FICHA",
         "BIRTHDATE": "FECHA_NACIMIENTO",
@@ -27,6 +28,7 @@ PLACEHOLDERS: dict[str, dict[str, str]] = {
         "PATIENT": "PATIENT",
         "PERSON": "PERSON",
         "PROFESSIONAL": "PROVIDER",
+        "ORGANIZATION": "ORGANIZATION",
         "ID": "ID",
         "RECORD": "RECORD_NO",
         "BIRTHDATE": "BIRTH_DATE",
@@ -72,4 +74,4 @@ def detect_language(text: str, default: str = "es") -> str:
                 counts[lang] += 1
     if counts["es"] == counts["en"]:
         return default
-    return max(counts, key=counts.get)
+    return max(counts, key=lambda lang: counts[lang])

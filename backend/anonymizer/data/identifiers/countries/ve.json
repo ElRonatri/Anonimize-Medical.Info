@@ -1,0 +1,18 @@
+{
+  "country": "Venezuela",
+  "codes": [
+    "VE"
+  ],
+  "patterns": [
+    {
+      "label": "CI_VE",
+      "name": "Cédula de Identidad (V-/E-)",
+      "regex": "${B}[VE]-?\\d{1,2}\\.?\\d{3}\\.?\\d{3}${E}"
+    },
+    {
+      "label": "RIF_VE",
+      "name": "RIF",
+      "regex": "${B}[VEJPG]-\\d{8}-\\d${E}"
+    }
+  ]
+}

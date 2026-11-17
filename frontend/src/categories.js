@@ -23,6 +23,7 @@ const byCategory = {
   URL: palette.cyan,
   IP: palette.cyan,
   ADDRESS: palette.emerald,
+  ORGANIZATION: palette.violet,
   CUSTOM: palette.slate,
 }
 

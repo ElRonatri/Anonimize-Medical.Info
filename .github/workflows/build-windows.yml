@@ -1,0 +1,183 @@
+name: Build Windows
+
+# Workflow reutilizable: compila una variante con PyInstaller, ejecuta la autoprueba del .exe
+# (sin ventana ni red), y publica el ZIP con su suma SHA-256. Lo usan ci.yml y release.yml.
+
+on:
+  workflow_call:
+    inputs:
+      variant:
+        description: "base | ocr | tesseract | ner"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Windows (${{ inputs.variant }})
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Interfaz
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+      - name: Dependencias
+        shell: pwsh
+        run: |
+          pip install -r requirements.txt pyinstaller
+          if ("${{ inputs.variant }}" -eq "ocr") { pip install -r requirements-ocr.txt }
+          if ("${{ inputs.variant }}" -eq "ner") { pip install -r requirements-ner.txt }
+      - name: Tesseract (sólo para empaquetarlo; se descarga en tiempo de build)
+        if: inputs.variant == 'tesseract'
+        run: choco install tesseract -y --no-progress
+      - name: PyInstaller
+        shell: pwsh
+        run: |
+          if ("${{ inputs.variant }}" -eq "ocr") { $env:BUNDLE_RAPIDOCR = "1" }
+          if ("${{ inputs.variant }}" -eq "ner") { $env:BUNDLE_NER = "1" }
+          if ("${{ inputs.variant }}" -eq "tesseract") { $env:BUNDLE_TESSERACT_DIR = "C:\Program Files\Tesseract-OCR" }
+          pyinstaller --noconfirm --clean anonimize.spec
+      - name: Autoprueba del ejecutable (sin ventana ni red)
+        shell: pwsh
+        run: |
+          $report = Join-Path $env:RUNNER_TEMP "self-test.json"
+          $cliArgs = @("--self-test", "--self-test-report", "`"$report`"")
+          if ("${{ inputs.variant }}" -eq "ocr") { $cliArgs += @("--expect-ocr", "rapidocr") }
+          if ("${{ inputs.variant }}" -eq "tesseract") { $cliArgs += @("--expect-ocr", "tesseract") }
+          if ("${{ inputs.variant }}" -eq "ner") { $cliArgs += @("--expect-ner") }
+          $p = Start-Process -FilePath "dist\AnonimizeMedical\AnonimizeMedical.exe" -ArgumentList $cliArgs -Wait -PassThru
+          Get-Content $report
+          if ($p.ExitCode -ne 0) { throw "La autoprueba falló (código $($p.ExitCode))" }
+          $data = Get-Content $report | ConvertFrom-Json
+          if ("${{ inputs.variant }}" -eq "tesseract" -and $data.tesseract_cmd -notlike "*_internal*") {
+            throw "Se usó un Tesseract del sistema en lugar del empaquetado: $($data.tesseract_cmd)"
+          }
+          $v = (Get-Item "dist\AnonimizeMedical\AnonimizeMedical.exe").VersionInfo.ProductVersion
+          Write-Host "Versión del ejecutable: $v"
+          if (-not $v) { throw "El ejecutable no tiene información de versión" }
+      - name: Privacidad en disco (ventana real, dato centinela)
+        shell: pwsh
+        timeout-minutes: 25
+        run: |
+          # Espera con plazo: si la sonda se cuelga, se termina su árbol de procesos y el paso falla.
+          function Wait-Probe($proc, $seconds, $label) {
+            $null = $proc.Handle
+            if (-not $proc.WaitForExit($seconds * 1000)) {
+              & taskkill /PID $proc.Id /T /F | Out-Null
+              throw "La sonda ($label) no terminó en $seconds s"
+            }
+            return $proc.ExitCode
+          }
+          # Centinela único por ejecución, con letras que el OCR no confunde. El texto completo no
+          # aparece en este script (se arma al vuelo), así no contamina el disco por otra vía.
+          $up = 'ABCDEFHKMNPRSTUVWXZ'.ToCharArray(); $low = 'acdefhkmnprstuvwxz'.ToCharArray()
+          $tok = "$($up | Get-Random)" + (-join (1..9 | ForEach-Object { $low | Get-Random }))
+          $sentinel = "Zxqwerty Centinela $tok"
+          $exe = Resolve-Path "dist\AnonimizeMedical\AnonimizeMedical.exe"
+          $out = Join-Path $env:RUNNER_TEMP "privacy-probe"
+          $wvProfile = Join-Path $env:LOCALAPPDATA "AnonimizeMedical\WebView2"
+          $since = (Get-Date).AddSeconds(-2)
+
+          # Control positivo: el escáner debe encontrar un centinela escrito a propósito en UTF-16.
+          $ctl = "Kontrol" + (-join (1..8 | ForEach-Object { $low | Get-Random }))
+          $ctlFile = Join-Path $env:LOCALAPPDATA "control-escaner.bin"
+          [System.IO.File]::WriteAllBytes($ctlFile, [System.Text.Encoding]::Unicode.GetBytes("x $ctl y"))
+          & ./scripts/scan_residue.ps1 -Token $ctl -Since $since -Roots @($env:LOCALAPPDATA)
+          if ($LASTEXITCODE -ne 1) { throw "El escáner no detectó el control positivo" }
+          Remove-Item $ctlFile
+
+          # 1) Cierre abrupto: el perfil de WebView2 queda en disco...
+          $crash = Start-Process $exe -PassThru -ArgumentList @(
+            "--privacy-probe", "`"$out\crash`"", "--probe-sentinel", "`"$sentinel`"", "--probe-crash",
+            "--probe-hold", "1", "--probe-deadline", "420")
+          $crashCode = Wait-Probe $crash 480 "cierre abrupto"
+          Get-Content "$out\crash\probe-report.json" -ErrorAction SilentlyContinue
+          if ($crashCode -ne 3) { throw "La sonda con cierre abrupto terminó con código $crashCode (se esperaba 3)" }
+          # Tras un fallo del proceso principal no deben quedar procesos de extracción vivos.
+          Start-Sleep 5
+          $orphans = @(Get-Process AnonimizeMedical -ErrorAction SilentlyContinue)
+          Write-Host "Procesos AnonimizeMedical tras el cierre abrupto: $($orphans.Count)"
+          if ($orphans.Count) { $orphans | Stop-Process -Force; throw "Quedaron $($orphans.Count) procesos huérfanos tras el cierre abrupto" }
+          $leftover = Test-Path $wvProfile
+          Write-Host "Perfil tras el cierre abrupto: $(if ($leftover) { 'presente (se limpiará al iniciar)' } else { 'ausente' })"
+          Start-Sleep 5
+
+          # 2) ...y la siguiente ejecución normal lo limpia al iniciar y al cerrar.
+          $p = Start-Process $exe -PassThru -ArgumentList @(
+            "--privacy-probe", "`"$out\normal`"", "--probe-sentinel", "`"$sentinel`"", "--probe-hold", "6",
+            "--probe-deadline", "420")
+          $null = $p.Handle  # sin esto, ExitCode queda vacío al no usar -Wait
+          $cmdlines = @{}
+          $limit = (Get-Date).AddSeconds(480)
+          while (-not $p.HasExited) {
+            if ((Get-Date) -gt $limit) { & taskkill /PID $p.Id /T /F | Out-Null; throw "La sonda no terminó en 480 s" }
+            Get-CimInstance Win32_Process -Filter "Name='msedgewebview2.exe'" -ErrorAction SilentlyContinue |
+              Where-Object { $_.CommandLine -like "*AnonimizeMedical*" } |
+              ForEach-Object { $cmdlines[$_.ProcessId] = $_.CommandLine }
+            Start-Sleep -Milliseconds 300
+          }
+          $p.WaitForExit()
+          Get-Content "$out\normal\probe-report.json"
+          $browser = $cmdlines.Values | Where-Object { $_ -notmatch "--type=" } | Select-Object -First 1
+          $crashpad = @($cmdlines.Values | Where-Object { $_ -match "--type=crashpad-handler" }).Count
+          Write-Host "Procesos de WebView2 observados: $($cmdlines.Count) · crashpad-handler: $crashpad"
+          Write-Host "Navegador: $(if ($browser) { ($browser -split ' ' | Where-Object { $_ -match '^--(user-data-dir|disable-breakpad|disable-crash-reporter|disable-features)' }) -join ' ' })"
+          if ($p.ExitCode -ne 0) { throw "La sonda de privacidad falló (código $($p.ExitCode))" }
+          if (-not $cmdlines.Count) { throw "No se observó WebView2: la ventana no llegó a abrirse" }
+          if (-not $browser -or $browser -notmatch "--disable-breakpad") { throw "WebView2 arrancó sin --disable-breakpad" }
+          if ($leftover -eq $false) { Write-Host "(El cierre abrupto no dejó perfil: no se pudo probar la limpieza al iniciar)" }
+          Start-Sleep 3
+          if (Test-Path $wvProfile) { throw "El perfil de WebView2 sigue en disco tras cerrar" }
+
+          # 3) Búsqueda del centinela en %TEMP%, %LOCALAPPDATA% y %APPDATA% (texto plano y UTF-16).
+          $appDirs = @((Join-Path $env:APPDATA "AnonimizeMedical"), (Join-Path $env:LOCALAPPDATA "AnonimizeMedical"))
+          & ./scripts/scan_residue.ps1 -Token $tok -Since $since `
+            -Roots @($env:TEMP, $env:LOCALAPPDATA, $env:APPDATA) -Always $appDirs
+          if ($LASTEXITCODE -ne 0) { throw "Se encontró el dato centinela en el disco" }
+          Get-ChildItem -Force -Recurse $appDirs -ErrorAction SilentlyContinue | Select-Object FullName, Length | Format-Table
+          "### Privacidad en disco (${{ inputs.variant }})`nCentinela no encontrado; perfil borrado; crashpad-handler: $crashpad" >> $env:GITHUB_STEP_SUMMARY
+      - name: Variante base sin motores pesados
+        if: inputs.variant == 'base'
+        shell: pwsh
+        run: |
+          foreach ($pkg in @("rapidocr", "onnxruntime", "tesseract", "spacy", "thinc", "xx_ent_wiki_sm")) {
+            if (Test-Path "dist\AnonimizeMedical\_internal\$pkg") { throw "La variante base incluye $pkg" }
+          }
+      - name: Tamaño de la variante
+        shell: pwsh
+        run: |
+          $bytes = (Get-ChildItem -Recurse "dist\AnonimizeMedical" | Measure-Object -Sum Length).Sum
+          $mb = [math]::Round($bytes / 1MB, 1)
+          Write-Host "Tamaño ${{ inputs.variant }}: $mb MB"
+          "| ${{ inputs.variant }} | $mb MB |" >> $env:GITHUB_STEP_SUMMARY
+      # Firma Authenticode (opcional): insertar aquí la firma de dist\AnonimizeMedical\*.exe,
+      # ANTES de comprimir, para que la suma SHA-256 corresponda al ejecutable firmado.
+      # Ver docs/signing.md.
+      - name: ZIP + SHA-256
+        shell: pwsh
+        run: |
+          $version = python -c "import sys; sys.path.insert(0, 'backend'); import anonymizer; print(anonymizer.__version__)"
+          New-Item -ItemType Directory -Force release | Out-Null
+          $zip = "release\AnonimizeMedical-$version-windows-${{ inputs.variant }}.zip"
+          Compress-Archive -Path dist\AnonimizeMedical -DestinationPath $zip
+          python scripts/checksums.py create release -o "release\SHA256SUMS-${{ inputs.variant }}.txt"
+          "**${{ inputs.variant }}**: ``$(Get-Content "release\SHA256SUMS-${{ inputs.variant }}.txt")``" >> $env:GITHUB_STEP_SUMMARY
+      - uses: actions/upload-artifact@v7
+        with:
+          name: AnonimizeMedical-windows-${{ inputs.variant }}
+          path: release/
+          retention-days: 7

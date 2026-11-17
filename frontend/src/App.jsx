@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { CircleCheck, Lock, TriangleAlert, X } from 'lucide-react'
+import { CircleCheck, Info, Lock, TriangleAlert, X } from 'lucide-react'
 import Header from './components/Header.jsx'
 import InputPanel from './components/InputPanel.jsx'
 import OptionsPanel from './components/OptionsPanel.jsx'
 import ResultPanel from './components/ResultPanel.jsx'
 import EntitiesPanel from './components/EntitiesPanel.jsx'
 import JobProgress from './components/JobProgress.jsx'
+import ResponsibleUseDialog from './components/ResponsibleUseDialog.jsx'
 import { backend, copyText, getApi } from './api.js'
 import { useI18n } from './i18n.jsx'
 import { loadPref, savePref } from './storage.js'
@@ -23,11 +24,22 @@ const DEFAULT_OPTIONS = {
   aggressive_numbers: false,
   ocr_mode: 'auto',
   ocr_engine: 'auto',
+  max_workers: 'auto',
+  ner: false,
+  ner_orgs: false,
+  ner_threshold: 0.8,
   custom_terms: [],
   whitelist: [],
 }
 
 const POLL_MS = 250
+
+// Privacidad: las preferencias se guardan (prefs.json, vía backend), pero NUNCA los términos a
+// ocultar (suelen ser nombres de pacientes): sólo viven durante la sesión. El backend además
+// descarta cualquier clave que no esté en su lista (backend/appdata.py).
+function persistable({ custom_terms: _sessionOnly, ...rest }) {
+  return rest
+}
 
 function initialTheme() {
   const saved = loadPref('theme')
@@ -43,7 +55,7 @@ export default function App() {
   const [info, setInfo] = useState(null)
   const [backendMissing, setBackendMissing] = useState(false)
 
-  const [options, setOptions] = useState(() => ({ ...DEFAULT_OPTIONS, ...loadPref('options', {}) }))
+  const [options, setOptions] = useState(() => ({ ...DEFAULT_OPTIONS, ...persistable(loadPref('options', {})) }))
   const [excluded, setExcluded] = useState([])
 
   const [mode, setMode] = useState('file')
@@ -59,6 +71,12 @@ export default function App() {
 
   const [message, setMessage] = useState(null) // { kind: 'error' | 'warning' | 'success', text }
   const [copied, setCopied] = useState(false)
+
+  // Privacidad y uso responsable: diálogo de primer uso (sólo se guarda "no volver a mostrar")
+  // y recordatorio, una vez por sesión, al copiar o exportar por primera vez.
+  const [dontShowResponsible, setDontShowResponsible] = useState(() => loadPref('responsibleUseDismissed', false) === true)
+  const [responsibleOpen, setResponsibleOpen] = useState(() => loadPref('responsibleUseDismissed', false) !== true)
+  const reminderShown = useRef(false)
 
   const resultsRef = useRef(results)
   resultsRef.current = results
@@ -86,13 +104,14 @@ export default function App() {
     }
   }, [])
 
-  useEffect(() => savePref('options', options), [options])
+  useEffect(() => savePref('options', persistable(options)), [options])
 
   const requestOptions = useMemo(
     () => ({ ...options, exclude: excluded.flatMap((e) => e.values) }),
     [options, excluded],
   )
-  const optionsKey = JSON.stringify(requestOptions)
+  // max_workers sólo afecta a lotes nuevos: no requiere re-anonimizar lo ya procesado.
+  const optionsKey = JSON.stringify({ ...requestOptions, max_workers: undefined })
 
   // ---------------------------------------------------------------- utilidades de estado
   const errorText = useCallback(
@@ -190,7 +209,20 @@ export default function App() {
         }
         return
       }
-      setJob((j) => (j?.id === job.id ? { ...j, total: state.total, completed: state.completed, current: state.current } : j))
+      setJob((j) =>
+        j?.id === job.id
+          ? {
+              ...j,
+              total: state.total,
+              completed: state.completed,
+              current: state.current,
+              active: state.active,
+              workers: state.workers,
+              mode: state.mode,
+              eta_seconds: state.eta_seconds,
+            }
+          : j,
+      )
       timer = setTimeout(tick, POLL_MS)
     }
     timer = setTimeout(tick, 80)
@@ -222,7 +254,11 @@ export default function App() {
     return () => clearTimeout(timer)
   }, [optionsKey, job, hasDone]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const cancelJob = () => job && backend.cancelJob(job.id)
+  const cancelJob = () => {
+    if (!job) return
+    setJob((j) => (j ? { ...j, cancelling: true } : j))
+    backend.cancelJob(job.id)
+  }
 
   const removeItem = (id) => {
     backend.removeItems([id])
@@ -256,9 +292,24 @@ export default function App() {
     return { id: item.id, name: item.name, text: drafts[item.id]?.text ?? '', edited: !!drafts[item.id]?.edited, meta }
   }
 
+  const closeResponsible = (dontShowAgain) => {
+    setResponsibleOpen(false)
+    setDontShowResponsible(dontShowAgain)
+    savePref('responsibleUseDismissed', !!dontShowAgain)
+  }
+
+  // Devuelve el recordatorio la primera vez en la sesión (y null después).
+  const takeReminder = () => {
+    if (reminderShown.current) return null
+    reminderShown.current = true
+    return t('reviewReminder')
+  }
+
   const copy = async () => {
     if (!draft) return
     if (await copyText(draft.text)) {
+      const reminder = takeReminder()
+      if (reminder) setMessage({ kind: 'info', text: reminder })
       setCopied(true)
       setTimeout(() => setCopied(false), 1800)
     } else {
@@ -269,12 +320,19 @@ export default function App() {
   const exportOne = async (fmt) => {
     if (!selected || !result) return
     const res = await backend.exportFile(docPayload(selected), fmt, requestOptions)
-    if (!res?.ok && !res?.cancelled) setMessage({ kind: 'error', text: errorText(res?.error) })
+    if (res?.ok) {
+      const reminder = takeReminder()
+      if (reminder) setMessage({ kind: 'info', text: reminder })
+    } else if (!res?.cancelled) setMessage({ kind: 'error', text: errorText(res?.error) })
   }
 
   const exportAll = async (fmt, generic) => {
     const res = await backend.exportBatch(doneItems.map(docPayload), fmt, requestOptions, generic)
-    if (res?.ok) setMessage({ kind: 'success', text: `${t('exportedMany', res.count)} ${res.folder}` })
+    if (res?.ok) {
+      const reminder = takeReminder()
+      const done = `${t('exportedMany', res.count)} ${res.folder}`
+      setMessage({ kind: 'success', text: reminder ? `${done} ${reminder}` : done })
+    }
     else if (!res?.cancelled) setMessage({ kind: 'error', text: errorText(res?.error) })
   }
 
@@ -297,13 +355,21 @@ export default function App() {
     error: 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300',
     warning: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300',
     success: 'border-teal-200 bg-teal-50 text-teal-800 dark:border-teal-500/30 dark:bg-teal-500/10 dark:text-teal-300',
+    info: 'border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-100',
   }
-  const BannerIcon = banner?.kind === 'success' ? CircleCheck : TriangleAlert
+  const BannerIcon = banner?.kind === 'success' ? CircleCheck : banner?.kind === 'info' ? Info : TriangleAlert
 
   // ---------------------------------------------------------------- render
   return (
-    <div className="flex h-full flex-col">
-      <Header theme={theme} onToggleTheme={() => setTheme((v) => (v === 'dark' ? 'light' : 'dark'))} version={info?.version} />
+    <>
+    {/* Con el diálogo abierto, el resto de la app queda inerte (ni foco ni lector de pantalla). */}
+    <div className="flex h-full flex-col" inert={responsibleOpen || undefined}>
+      <Header
+        theme={theme}
+        onToggleTheme={() => setTheme((v) => (v === 'dark' ? 'light' : 'dark'))}
+        version={info?.version}
+        onOpenResponsible={() => setResponsibleOpen(true)}
+      />
 
       {backendMissing && (
         <div className="border-b border-amber-200 bg-amber-50 px-5 py-2 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
@@ -335,12 +401,21 @@ export default function App() {
           <JobProgress job={job} items={items} onCancel={cancelJob} />
 
           {banner && (
-            <div role="alert" className={`flex items-start gap-2 rounded-xl border px-3 py-2 text-sm ${bannerStyles[banner.kind]}`}>
+            <div
+              role={banner.kind === 'error' ? 'alert' : 'status'}
+              className={`flex items-start gap-2 rounded-xl border px-3 py-2 text-sm ${bannerStyles[banner.kind]}`}
+            >
               <BannerIcon className="mt-0.5 h-4 w-4 shrink-0" />
               <span className="min-w-0 flex-1 break-words">{banner.text}</span>
               {message && (
-                <button type="button" onClick={() => setMessage(null)} className="opacity-60 hover:opacity-100">
-                  <X className="h-4 w-4" />
+                <button
+                  type="button"
+                  onClick={() => setMessage(null)}
+                  aria-label={t('dismissMessage')}
+                  title={t('dismissMessage')}
+                  className="rounded opacity-70 hover:opacity-100 focus:outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-current"
+                >
+                  <X className="h-4 w-4" aria-hidden />
                 </button>
               )}
             </div>
@@ -365,12 +440,14 @@ export default function App() {
             <EntitiesPanel entities={result.entities} excluded={excluded} onExclude={exclude} onRestore={restore} />
           )}
 
-          <p className="flex items-start gap-1.5 px-1 text-xs text-slate-500 dark:text-slate-400">
-            <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <p className="flex items-start gap-1.5 px-1 text-xs text-slate-600 dark:text-slate-400">
+            <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
             {t('privacyNote')}
           </p>
         </section>
       </main>
     </div>
+    <ResponsibleUseDialog open={responsibleOpen} dontShowAgain={dontShowResponsible} onClose={closeResponsible} />
+    </>
   )
 }

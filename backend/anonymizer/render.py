@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from typing import Callable
+from collections.abc import Callable
 
 from .document import Block, Document, Page
 from .lang import NO_TEXT_PAGE, PAGE_LABEL
@@ -35,7 +35,7 @@ def strip_repeated_lines(doc: Document, window: int = 4) -> Document:
     if len(pages) < 2:
         return doc
 
-    def edge_lines(page: Page):
+    def edge_lines(page: Page) -> list[Block]:
         lines = [b for b in page.blocks if b.kind == "line" and b.text.strip()]
         return lines[:window] + lines[-window:]
 
@@ -82,7 +82,7 @@ def _is_heading(text: str) -> bool:
     return text.upper() == text and sum(c.isupper() for c in letters) == len(letters)
 
 
-def _kv(text: str):
+def _kv(text: str) -> tuple[str, str] | None:
     m = KV_RE.match(text)
     if not m:
         return None
@@ -100,7 +100,7 @@ def _split_on_labels(segment: str) -> list[str]:
     if not cuts:
         return [segment]
     bounds = [0] + cuts + [len(segment)]
-    pieces = [segment[a:b].strip().rstrip(" -–,;").strip() for a, b in zip(bounds, bounds[1:])]
+    pieces = [segment[a:b].strip().rstrip(" -–,;").strip() for a, b in zip(bounds, bounds[1:], strict=False)]
     return [p for p in pieces if p]
 
 
@@ -122,13 +122,13 @@ def _render_page_markdown(page: Page, redact: Redact) -> list[str]:
     current: list[str] = []
     current_kind = None
 
-    def flush():
+    def flush() -> None:
         nonlocal current, current_kind
         if current:
             chunks.append("\n".join(current))
         current, current_kind = [], None
 
-    def push(kind: str, line: str):
+    def push(kind: str, line: str) -> None:
         nonlocal current_kind
         if current_kind != kind:
             flush()
@@ -166,8 +166,9 @@ def _render_page_markdown(page: Page, redact: Redact) -> list[str]:
             split_kvs = [_kv(s) for s in split]
             if all(split_kvs):
                 kvs = split_kvs
-        if all(kvs):
-            for label, value in kvs:
+        pairs = [kv for kv in kvs if kv is not None]
+        if len(pairs) == len(kvs):
+            for label, value in pairs:
                 push("kv", f"- **{label}:** {value}")
             continue
         if len(segments) == 1 and text.endswith(":") and len(text) <= 60:

@@ -5,18 +5,43 @@ from __future__ import annotations
 import functools
 import re
 import unicodedata
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from functools import lru_cache
+from typing import Any
 
-from . import identifiers, rules
+from . import fastmatch, identifiers, rules
+from . import ner as ner_engine
 from .lang import PLACEHOLDERS
 
 NAME_CATEGORIES = ("PATIENT", "PERSON", "PROFESSIONAL")
 CATEGORY_PRIORITY = {c: i for i, c in enumerate(
     ("PATIENT", "BIRTHDATE", "ID", "RECORD", "PERSON", "PHONE", "EMAIL", "ADDRESS",
-     "PROFESSIONAL", "CUSTOM", "URL", "IP", "DATE"))}
+     "PROFESSIONAL", "ORGANIZATION", "CUSTOM", "URL", "IP", "DATE"))}
 
 DIGIT_KINDS = {"ID", "RECORD", "PHONE"}
+
+# Motor para buscar los valores ya detectados (nombres, apellidos, términos personalizados e
+# identificadores) en cada línea:
+#   "aho"   Aho-Corasick: una pasada, el costo no crece con la cantidad de valores.
+#   "regex" una expresión con alternativas: más rápida con pocos valores (sin preparación).
+#   "auto"  (por defecto) Aho-Corasick a partir de AHO_MIN_TERMS valores de un mismo tipo.
+_ENGINES = ("auto", "aho", "regex")
+_literal_engine = "auto" if fastmatch.AVAILABLE else "regex"
+AHO_MIN_TERMS = 100  # punto de cruce medido con scripts/bench.py (ver docs/benchmarks.md)
+
+
+def set_literal_engine(engine: str) -> None:
+    global _literal_engine
+    if engine not in _ENGINES:
+        raise ValueError(f"motor desconocido: {engine}")
+    if engine != "regex" and not fastmatch.AVAILABLE:
+        raise RuntimeError("pyahocorasick no está instalado")
+    _literal_engine = engine
+
+
+def literal_engine() -> str:
+    return _literal_engine
 
 
 # --------------------------------------------------------------------------- normalización
@@ -70,7 +95,7 @@ def fuzzy_digits_pattern(value: str) -> str:
     return r"[\s.\-/()]?".join(re.escape(c) for c in chars)
 
 
-def compile_terms(terms) -> re.Pattern | None:
+def compile_terms(terms: Iterable[str]) -> re.Pattern[str] | None:
     """Una sola regex precompilada (insensible a tildes/mayúsculas) para una lista de términos."""
     terms = sorted({t for t in terms if t and t.strip()}, key=len, reverse=True)
     if not terms:
@@ -95,10 +120,13 @@ class Options:
     aggressive_numbers: bool = False  # ocultar cualquier secuencia de >= 7 dígitos
     custom_terms: list[str] = field(default_factory=list)
     whitelist: list[str] = field(default_factory=list)  # términos que nunca se anonimizan
+    ner: bool = False  # segunda pasada con NER (sólo variante de build --ner)
+    ner_orgs: bool = False  # además, organizaciones (hospitales, clínicas...)
+    ner_threshold: float = ner_engine.DEFAULT_THRESHOLD
     exclude: list[str] = field(default_factory=list)
 
     @classmethod
-    def from_dict(cls, data: dict | None) -> "Options":
+    def from_dict(cls, data: dict[str, Any] | None) -> Options:
         data = data or {}
         opts = cls()
         for key, value in data.items():
@@ -143,35 +171,64 @@ class Knowledge:
         self.token_keys: dict[str, tuple[str, str]] = {}  # token normalizado -> (cat, key)
         self.name_keys: dict[str, tuple[str, set[str]]] = {}  # key -> (cat, tokens)
         self._counter = 0
-        self.text_re: re.Pattern | None = None
-        self.digit_re: re.Pattern | None = None
+        self.text_re: re.Pattern[str] | None = None
+        self.digit_re: re.Pattern[str] | None = None
         self.text_lookup: dict[str, list[Literal]] = {}
         self.digit_lookup: dict[str, list[Literal]] = {}
+        self.term_matcher: fastmatch.TermMatcher | None = None
+        self.digit_matcher: fastmatch.TermMatcher | None = None
+        self.ner_summary: dict[str, Any] = {"used": False}
 
     def is_excluded(self, value: str) -> bool:
         n = norm(value)
         return n in self.excluded or n in self.whitelist or norm_digits(value) in self.excluded
 
     # ---------------------------------------------------------------- compilación
-    def compile(self) -> "Knowledge":
+    def compile(self) -> Knowledge:
+        """Prepara la búsqueda de todos los literales.
+
+        * Nombres, apellidos y términos personalizados -> Aho-Corasick (si está disponible).
+        * Resto de textos (direcciones, fechas, correos) -> una regex combinada.
+        * Identificadores numéricos -> otra regex combinada (tolera separadores).
+        """
+        def use_aho(count: int) -> bool:
+            return _literal_engine == "aho" or (_literal_engine == "auto" and count >= AHO_MIN_TERMS)
+
+        literals = list(self.literals.values())
+        names = [lit for lit in literals if lit.name_token or lit.category == "CUSTOM"]
+        digit_lits = [lit for lit in literals if lit.digits]
+        self.term_matcher = fastmatch.TermMatcher() if use_aho(len(names)) else None
+        self.digit_matcher = fastmatch.TermMatcher(digits=True) if use_aho(len(digit_lits)) else None
         groups: dict[bool, list[Literal]] = {False: [], True: []}
         self.text_lookup, self.digit_lookup = {}, {}
-        for lit in self.literals.values():
+        for lit in literals:
+            if self.term_matcher is not None and (lit.name_token or lit.category == "CUSTOM"):
+                self.term_matcher.add(lit.value, lit)
+                continue
+            if self.digit_matcher is not None and lit.digits:
+                self.digit_matcher.add(lit.value, lit)
+                continue
             groups[lit.digits].append(lit)
             table = self.digit_lookup if lit.digits else self.text_lookup
             table.setdefault(lit.lookup, []).append(lit)
 
-        def build(lits: list[Literal]) -> re.Pattern | None:
+        def build(lits: list[Literal]) -> re.Pattern[str] | None:
             if not lits:
                 return None
-            sources = []
-            for lit in sorted(lits, key=lambda l: len(l.value), reverse=True):
-                if lit.source not in sources:
-                    sources.append(lit.source)
-            return re.compile(rf"(?<![\w])(?:{'|'.join(sources)})(?![\w])", re.IGNORECASE)
+            ordered = sorted(lits, key=lambda item: len(item.value), reverse=True)
+            # Fin de cada valor: si termina en dígito sólo se exige que no siga OTRO dígito. El OCR
+            # suele pegar el campo siguiente ("21/08/1985Edad:", "778201Previsión:"); con el
+            # límite de palabra estricto esos datos quedaban visibles. Los nombres mantienen
+            # el límite estricto ("Rosa" no debe ocultarse dentro de "Rosalía").
+            alternatives = [f"(?:{lit.source}){_end_boundary(lit.value)}" for lit in ordered]
+            alternatives = list(dict.fromkeys(alternatives))  # sin duplicados, O(n)
+            return re.compile(rf"(?<![\w])(?:{'|'.join(alternatives)})", re.IGNORECASE)
 
         self.text_re = build(groups[False])
         self.digit_re = build(groups[True])
+        for matcher in (self.term_matcher, self.digit_matcher):
+            if matcher is not None:
+                matcher.build()
         return self
 
     def _store(self, slot: tuple[str, bool], literal: Literal) -> None:
@@ -252,6 +309,11 @@ class Knowledge:
                         Literal(category, key, token, fuzzy_text_pattern(token), name_token=True))
 
 
+def _end_boundary(value: str) -> str:
+    """Límite derecho de un literal: tras un dígito basta con que no siga otro dígito."""
+    return r"(?![0-9])" if value[-1:].isdigit() else r"(?![\w])"
+
+
 def _significant(token: str) -> bool:
     plain = token.strip(".,'’-")
     return (len(plain) >= 3 and plain.lower() not in rules.PARTICLES
@@ -303,6 +365,8 @@ def parse_name(raw: str) -> list[str]:
 # --------------------------------------------------------------------------- extracción de valores rotulados
 
 _ID_VALUE_RE = re.compile(r"^[A-Za-z]{0,4}[\s.\-]?\d[\dA-Za-z.\-/]*")
+# Palabra pegada al final de un identificador por el OCR: "778201Previsión" -> "778201".
+_GLUED_WORD_RE = re.compile(r"(?<=\d)[A-ZÁÉÍÓÚÑ][a-záéíóúñ]{2,}.*$")
 _PHONE_VALUE_RE = re.compile(r"\+?\(?\d[\d\s().\-]{5,22}\d")
 
 
@@ -335,7 +399,8 @@ def _extract_labeled(knowledge: Knowledge, text: str, opts: Options) -> None:
     regex, active = rules.combined_rules(bool(opts.anonymize_professionals),
                                          bool(opts.anonymize_addresses))
     for m in regex.finditer(lowered):
-        rule = active[int(m.lastgroup[1:])]
+        group = m.lastgroup or "r0"  # siempre hay un grupo con nombre (r0, r1, ...)
+        rule = active[int(group[1:])]
         line_end = text.find("\n", m.end())
         line_end = length if line_end < 0 else line_end
         rest = text[m.end():line_end]
@@ -358,7 +423,7 @@ def _register_value(knowledge: Knowledge, rule: rules.LabelRule, value: str) -> 
     elif kind == "id":
         if _match_date(value):
             return
-        m = _ID_VALUE_RE.match(value)
+        m = _ID_VALUE_RE.match(_GLUED_WORD_RE.sub("", value))
         if m and sum(c.isdigit() for c in m.group(0)) >= 3:
             knowledge.add_value(rule.category, m.group(0).rstrip(".-/"))
     elif kind == "phone":
@@ -376,7 +441,44 @@ def _register_value(knowledge: Knowledge, rule: rules.LabelRule, value: str) -> 
         knowledge.add_value(rule.category, value)
 
 
-def build_knowledge(text: str, opts: Options) -> Knowledge:
+def _professional_tokens(text: str) -> set[str]:
+    """Nombres que las reglas identifican como profesionales (etiqueta o tratamiento)."""
+    scratch = Knowledge(set())
+    _extract_labeled(scratch, text, Options(anonymize_professionals=True, anonymize_addresses=False))
+    for pattern in rules.PROFESSIONAL_PATTERNS:
+        for m in pattern.finditer(text):
+            scratch.add_name("PROFESSIONAL", m.group("name"))
+    return {token for category, tokens in scratch.name_keys.values() if category == "PROFESSIONAL"
+            for token in tokens}
+
+
+def _ner_pass(knowledge: Knowledge, text: str, opts: Options, lang: str) -> dict[str, Any]:
+    """Agrega nombres (y organizaciones) del NER a la propagación habitual."""
+    summary: dict[str, Any] = {"used": False, "model": ner_engine.available_models().get(lang),
+                               "persons": 0, "orgs": 0}
+    if not opts.ner or not ner_engine.available(lang):
+        return summary
+    try:
+        threshold = min(0.99, max(0.3, float(opts.ner_threshold)))
+    except (TypeError, ValueError):
+        threshold = ner_engine.DEFAULT_THRESHOLD
+    # Palabras de etiqueta («Teléfono», «Nombre»...), excepciones del usuario y, si no se
+    # anonimizan profesionales, sus nombres: el modelo no distingue roles.
+    stop = set(knowledge.whitelist | knowledge.excluded | _NON_NAME_NORM)
+    if not opts.anonymize_professionals:
+        stop |= _professional_tokens(text)
+    for entity in ner_engine.find_entities(text, lang, threshold, orgs=bool(opts.ner_orgs), stop=frozenset(stop)):
+        if entity.label == "PERSON":
+            knowledge.add_name("PERSON", entity.text)
+            summary["persons"] += 1
+        else:
+            knowledge.add_value("ORGANIZATION", entity.text)
+            summary["orgs"] += 1
+    summary["used"] = True
+    return summary
+
+
+def build_knowledge(text: str, opts: Options, lang: str | None = None) -> Knowledge:
     excluded = {norm(v) for v in opts.exclude} | {norm_digits(v) for v in opts.exclude if norm_digits(v)}
     knowledge = Knowledge(excluded, opts.whitelist)
 
@@ -394,6 +496,8 @@ def build_knowledge(text: str, opts: Options) -> Knowledge:
         for hit in identifiers.contextuales(text):
             category, label = _identifier_category(hit.etiqueta)
             knowledge.add_value(category, hit.texto, label)
+
+    knowledge.ner_summary = _ner_pass(knowledge, text, opts, lang) if lang else {"used": False}
 
     for term in opts.custom_terms:
         knowledge.add_custom(term)
@@ -442,9 +546,9 @@ class Redactor:
         self.opts = opts
         self.lang = lang if lang in PLACEHOLDERS else "es"
         self.countries = identifiers.resolver_region(opts.region)
-        self.numbers: dict[str, int] = {}
+        self.numbers: dict[tuple[str, str], int] = {}
         self.per_category: dict[str, int] = {}
-        self.report: dict[str, dict] = {}
+        self.report: dict[str, dict[str, Any]] = {}
 
     # ---------------------------------------------------------------- placeholders
     def placeholder(self, category: str, key: str, specific: str | None = None) -> str:
@@ -463,6 +567,16 @@ class Redactor:
     # ---------------------------------------------------------------- spans
     def _literal_spans(self, text: str, spans: list[Span]) -> None:
         kn = self.knowledge
+        for matcher in (kn.term_matcher, kn.digit_matcher):
+            if matcher is None:
+                continue
+            for start, end, candidates in matcher.finditer(text):
+                upper = text[start].isupper()
+                for lit in candidates:
+                    if lit.name_token and not upper:
+                        continue
+                    spans.append(Span(start, end, lit.category, lit.key, lit.label, 1 if lit.label else 2))
+                    break
         for regex, table, keyfn in ((kn.text_re, kn.text_lookup, lookup_key),
                                     (kn.digit_re, kn.digit_lookup, norm_digits)):
             if regex is None:
@@ -499,7 +613,8 @@ class Redactor:
                 spans = [s for s in spans if not any(a <= s.start and s.end <= b for a, b in allowed)]
         return spans
 
-    def _pattern_spans(self, text, spans, regex, category, digits=False):
+    def _pattern_spans(self, text: str, spans: list[Span], regex: re.Pattern[str], category: str,
+                       digits: bool = False) -> None:
         excluded = self.knowledge.is_excluded
         for m in regex.finditer(text):
             value = m.group(0)
@@ -540,7 +655,9 @@ class Redactor:
 
     @staticmethod
     def _resolve(spans: list[Span]) -> list[Span]:
-        spans.sort(key=lambda s: (-s.length, CATEGORY_PRIORITY.get(s.category, 99),
+        # A igual longitud gana lo más específico. La capa agresiva (rank 3, "[NUMERO]") siempre
+        # pierde frente a un dato reconocido (p. ej. N° de ficha), sea cual sea su categoría.
+        spans.sort(key=lambda s: (-s.length, s.rank >= 3, CATEGORY_PRIORITY.get(s.category, 99),
                                   s.rank, s.start))
         chosen: list[Span] = []
         for span in spans:
@@ -584,7 +701,7 @@ class Redactor:
         out.append(text[pos:])
         return "".join(out)
 
-    def entities(self) -> list[dict]:
+    def entities(self) -> list[dict[str, Any]]:
         items = sorted(self.report.values(),
                        key=lambda e: (CATEGORY_PRIORITY.get(e["category"], 99), e["placeholder"]))
         return [dict(e) for e in items]

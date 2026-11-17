@@ -158,3 +158,16 @@ def test_invalid_file_type():
 
     with pytest.raises(ExtractionError):
         load_bytes("foto.png", b"\x89PNG....")
+
+
+def test_ip_at_end_of_sentence():
+    result = run("Paciente: Ana Ruiz\nAcceso desde 10.0.12.7. Revisar 192.168.1.20 y 10.0.0.300.", output_format="text")
+    assert "10.0.12.7" not in result["text"] and "192.168.1.20" not in result["text"]
+    assert "10.0.0.300" in result["text"]  # no es una IP válida
+
+
+def test_aggressive_numbers_do_not_override_recognized_data():
+    text = "Nombre: Ana Ruiz\nFicha clínica N° 0098123\nPlaquetas 1.234.567"
+    result = run(text, output_format="text", aggressive_numbers=True)
+    assert "[N_FICHA_1]" in result["text"]
+    assert "[NUMERO_1]" in result["text"] and "1.234.567" not in result["text"]

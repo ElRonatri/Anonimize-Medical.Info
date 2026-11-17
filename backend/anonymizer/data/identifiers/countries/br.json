@@ -1,0 +1,20 @@
+{
+  "country": "Brasil",
+  "codes": [
+    "BR"
+  ],
+  "patterns": [
+    {
+      "label": "CPF_BR",
+      "name": "CPF",
+      "regex": "${B}\\d{3}\\.\\d{3}\\.\\d{3}-\\d{2}${E}",
+      "validator": "cpf_br"
+    },
+    {
+      "label": "CNS_BR",
+      "name": "Cartão Nacional de Saúde",
+      "regex": "${B}[12789]\\d{2}\\s?\\d{4}\\s?\\d{4}\\s?\\d{4}${E}",
+      "validator": "cns_br"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "country": "Italia",
+  "codes": [
+    "IT"
+  ],
+  "patterns": [
+    {
+      "label": "CF_IT",
+      "name": "Codice Fiscale",
+      "regex": "${B}[A-Z]{6}[\\dLMNP-V]{2}[A-EHLMPR-T][\\dLMNP-V]{2}[A-Z][\\dLMNP-V]{3}[A-Z]${E}",
+      "flags": [
+        "IGNORECASE"
+      ]
+    }
+  ]
+}

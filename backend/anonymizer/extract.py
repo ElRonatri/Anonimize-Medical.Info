@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import io
-import re
 import logging
+import re
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
+from typing import TYPE_CHECKING, Any
 
-from .document import Block, Document, Page
+if TYPE_CHECKING:
+    from pdfplumber.page import Page as PdfPage
+    from pdfplumber.table import Table as PdfTable
+
 from . import ocr
+from .document import Block, Document, Page
+from .privacy import log_exception
 
 log = logging.getLogger(__name__)
 
@@ -89,7 +95,7 @@ def _load_pdf(name: str, data: bytes, ocr_mode: str, ocr_engine: str,
             try:
                 page.blocks = _extract_page_blocks(pdf_page)
             except Exception as exc:  # una página dañada no debe tumbar el documento
-                log.exception("Error extrayendo página %s", index)
+                log_exception(log, "Error extrayendo la página %s", exc, index)
                 doc.warnings.append(f"page_error:{index}:{exc}")
                 page.blocks = []
 
@@ -102,7 +108,7 @@ def _load_pdf(name: str, data: bytes, ocr_mode: str, ocr_engine: str,
                         page.blocks = [Block("line", text=t) for t in lines]
                         page.ocr = True
                 except Exception as exc:
-                    log.exception("Error de OCR en página %s", index)
+                    log_exception(log, "Error de OCR en la página %s", exc, index)
                     doc.warnings.append(f"ocr_error:{index}:{exc}")
             doc.pages.append(page)
 
@@ -115,7 +121,7 @@ def _load_pdf(name: str, data: bytes, ocr_mode: str, ocr_engine: str,
     return doc
 
 
-def _needs_ocr(pdf_page, page: Page, mode: str) -> bool:
+def _needs_ocr(pdf_page: PdfPage, page: Page, mode: str) -> bool:
     """¿Conviene reconocer esta página como imagen?"""
     if mode == OCR_FORCE or page.empty:
         return True
@@ -128,19 +134,19 @@ def _needs_ocr(pdf_page, page: Page, mode: str) -> bool:
         image_area = sum(abs((im["x1"] - im["x0"]) * (im["bottom"] - im["top"])) for im in pdf_page.images)
     except Exception:
         return False
-    return image_area / page_area > 0.3
+    return bool(image_area / page_area > 0.3)
 
 
-def _extract_page_blocks(pdf_page) -> list[Block]:
+def _extract_page_blocks(pdf_page: PdfPage) -> list[Block]:
     tables = []
     try:
         tables = [t for t in pdf_page.find_tables() if _table_is_meaningful(t)]
     except Exception:
-        log.debug("Fallo detectando tablas", exc_info=True)
+        log.debug("Fallo detectando tablas en una página")
 
     bboxes = [t.bbox for t in tables]
 
-    def outside_tables(obj) -> bool:
+    def outside_tables(obj: dict[str, Any]) -> bool:
         if obj.get("object_type") != "char":
             return True
         cx = (obj["x0"] + obj["x1"]) / 2
@@ -164,7 +170,7 @@ def _extract_page_blocks(pdf_page) -> list[Block]:
     return [block for _, block in positioned]
 
 
-def _table_is_meaningful(table) -> bool:
+def _table_is_meaningful(table: PdfTable) -> bool:
     rows = table.extract()
     if len(rows) < 2:
         return False
@@ -175,20 +181,20 @@ def _table_is_meaningful(table) -> bool:
     return filled >= 3
 
 
-def _clean_cell(value) -> str:
+def _clean_cell(value: str | None) -> str:
     if value is None:
         return ""
     return _fix_cid(" ".join(str(value).split()))
 
 
-def _lines_from_words(page) -> list[tuple[float, str]]:
+def _lines_from_words(page: PdfPage) -> list[tuple[float, str]]:
     """Reconstruye líneas a partir de palabras, preservando huecos grandes como '   '."""
     words = page.extract_words(keep_blank_chars=False, use_text_flow=False, x_tolerance=1.5)
     if not words:
         return []
     words.sort(key=lambda w: (round(w["top"]), w["x0"]))
 
-    lines: list[list[dict]] = []
+    lines: list[list[dict[str, Any]]] = []
     for word in words:
         if lines and abs(lines[-1][0]["top"] - word["top"]) <= LINE_TOLERANCE:
             lines[-1].append(word)
@@ -199,7 +205,7 @@ def _lines_from_words(page) -> list[tuple[float, str]]:
     for line_words in lines:
         line_words.sort(key=lambda w: w["x0"])
         parts = [line_words[0]["text"]]
-        for prev, cur in zip(line_words, line_words[1:]):
+        for prev, cur in zip(line_words, line_words[1:], strict=False):
             char_w = max((prev["x1"] - prev["x0"]) / max(len(prev["text"]), 1), 2.0)
             gap = cur["x0"] - prev["x1"]
             parts.append("   " if gap > WIDE_GAP_FACTOR * char_w else " ")

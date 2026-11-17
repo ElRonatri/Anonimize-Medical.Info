@@ -1,0 +1,14 @@
+{
+  "country": "Emiratos Árabes Unidos",
+  "codes": [
+    "AE"
+  ],
+  "patterns": [
+    {
+      "label": "EID_AE",
+      "name": "Emirates ID",
+      "regex": "${B}784-?\\d{4}-?\\d{7}-?\\d${E}",
+      "validator": "luhn"
+    }
+  ]
+}

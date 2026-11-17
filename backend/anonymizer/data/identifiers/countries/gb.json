@@ -1,0 +1,19 @@
+{
+  "country": "Reino Unido",
+  "codes": [
+    "GB"
+  ],
+  "patterns": [
+    {
+      "label": "NINO_UK",
+      "name": "National Insurance Number",
+      "regex": "${B}(?!BG|GB|NK|KN|TN|NT|ZZ)[A-CEGHJ-PR-TW-Z][A-CEGHJ-NPR-TW-Z]\\s?\\d{2}\\s?\\d{2}\\s?\\d{2}\\s?[A-D]${E}"
+    },
+    {
+      "label": "NHS_UK",
+      "name": "NHS Number",
+      "regex": "${B}\\d{3}[ -]\\d{3}[ -]\\d{4}${E}",
+      "validator": "nhs_uk"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "country": "Ecuador",
+  "codes": [
+    "EC"
+  ],
+  "patterns": [
+    {
+      "label": "CI_EC",
+      "name": "Cédula de Identidad",
+      "regex": "${B}\\d{9}-?\\d${E}",
+      "validator": "ci_ec"
+    }
+  ]
+}

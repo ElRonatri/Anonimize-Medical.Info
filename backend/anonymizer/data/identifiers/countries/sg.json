@@ -1,0 +1,13 @@
+{
+  "country": "Singapur",
+  "codes": [
+    "SG"
+  ],
+  "patterns": [
+    {
+      "label": "NRIC_SG",
+      "name": "NRIC/FIN",
+      "regex": "${B}[STFGM]\\d{7}[A-Z]${E}"
+    }
+  ]
+}

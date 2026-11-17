@@ -39,7 +39,7 @@ export function Toggle({ checked, onChange, label, hint, id }) {
           checked={checked}
           onChange={(e) => onChange(e.target.checked)}
         />
-        <span className="h-5 w-9 rounded-full bg-slate-300 transition-colors peer-checked:bg-teal-600 peer-focus-visible:ring-2 peer-focus-visible:ring-teal-500/50 dark:bg-slate-700 dark:peer-checked:bg-teal-500" />
+        <span className="h-5 w-9 rounded-full bg-slate-300 transition-colors peer-checked:bg-teal-600 peer-focus-visible:ring-2 peer-focus-visible:ring-teal-600 focus-visible:ring-offset-1 dark:focus-visible:ring-teal-400 dark:focus-visible:ring-offset-slate-900 dark:bg-slate-700 dark:peer-checked:bg-teal-500" />
         <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform peer-checked:translate-x-4" />
       </span>
     </label>
@@ -55,12 +55,14 @@ export function Segmented({ value, onChange, options, label }) {
           <button
             key={opt.value}
             type="button"
+            data-testid={`option-${opt.value}`}
+            aria-pressed={value === opt.value}
             onClick={() => onChange(opt.value)}
             title={opt.title}
             className={cx(
-              'rounded-md px-2 py-1.5 text-xs font-medium transition',
+              'rounded-md px-2 py-1.5 text-xs font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600',
               value === opt.value
-                ? 'bg-white text-teal-700 shadow-sm dark:bg-slate-950 dark:text-teal-300'
+                ? 'bg-white text-teal-800 shadow-sm dark:bg-slate-950 dark:text-teal-300'
                 : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100',
             )}
           >
@@ -75,7 +77,8 @@ export function Segmented({ value, onChange, options, label }) {
 export function Button({ variant = 'secondary', className, children, ...props }) {
   const styles = {
     primary:
-      'bg-teal-600 text-white hover:bg-teal-700 disabled:bg-teal-600/50 dark:bg-teal-500 dark:text-slate-950 dark:hover:bg-teal-400',
+      // teal-700 + blanco = 5,5:1 (AA); teal-600 sólo llegaba a 3,7:1.
+      'bg-teal-700 text-white hover:bg-teal-800 disabled:bg-teal-700/50 dark:bg-teal-400 dark:text-slate-950 dark:hover:bg-teal-300',
     secondary:
       'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700',
     ghost: 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
@@ -84,7 +87,7 @@ export function Button({ variant = 'secondary', className, children, ...props })
     <button
       type="button"
       className={cx(
-        'inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/50 disabled:cursor-not-allowed',
+        'inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-1 dark:focus-visible:ring-teal-400 dark:focus-visible:ring-offset-slate-900 disabled:cursor-not-allowed',
         styles[variant],
         className,
       )}

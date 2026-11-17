@@ -1,0 +1,14 @@
+{
+  "country": "Francia",
+  "codes": [
+    "FR"
+  ],
+  "patterns": [
+    {
+      "label": "NIR_FR",
+      "name": "NIR (Sécurité sociale)",
+      "regex": "${B}[12]\\s?\\d{2}\\s?(?:0[1-9]|1[0-2]|[2-9]\\d)\\s?(?:\\d{2}|2[AB])\\s?\\d{3}\\s?\\d{3}\\s?\\d{2}${E}",
+      "validator": "nir_fr"
+    }
+  ]
+}

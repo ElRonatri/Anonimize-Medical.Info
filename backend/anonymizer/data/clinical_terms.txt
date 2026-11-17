@@ -1,0 +1,84 @@
+# Léxico clínico ES/EN para filtrar falsos positivos del NER (anonymizer/ner.py).
+# Palabras separadas por espacios o saltos de línea; se comparan sin tildes ni mayúsculas.
+# Una "persona" detectada por el modelo que contenga alguna de estas palabras se descarta
+# (p. ej. «Diabetes Mellitus», «Enfermedad de Parkinson»). En organizaciones, estas palabras se
+# consideran genéricas: «Servicio de Urgencia» se descarta, «Hospital del Salvador» no.
+# Se puede ampliar sin tocar código.
+
+# --- secciones y administración
+antecedentes anamnesis evolucion diagnostico diagnosticos indicaciones tratamiento tratamientos
+examen examenes fisico laboratorio imagenes epicrisis ingreso egreso alta control interconsulta
+plan motivo consulta historia clinica ficha informe resultado resultados procedimiento
+procedimientos protocolo operatorio nota notas resumen comentario observaciones conclusion
+servicio unidad urgencia urgencias uci uti upc pabellon sala cama box policlinico hospitalizacion
+medicina interna pediatria ginecologia obstetricia traumatologia cardiologia neurologia oncologia
+psiquiatria cirugia general enfermeria kinesiologia nutricion farmacia radiologia imagenologia
+dermatologia urologia nefrologia gastroenterologia endocrinologia hematologia infectologia
+neumologia reumatologia oftalmologia otorrinolaringologia geriatria anestesia anestesiologia
+neonatologia odontologia fonoaudiologia psicologia matroneria
+paciente pacientes usuario sr sra srta dr dra doctor doctora medico medica tratante residente
+interno interna enfermera enfermero kinesiologo kinesiologa matrona tecnologo
+lunes martes miercoles jueves viernes sabado domingo enero febrero marzo abril mayo junio julio
+agosto septiembre setiembre octubre noviembre diciembre hora fecha
+# --- patologías y signos
+diabetes mellitus hipertension arterial insuficiencia cardiaca renal cronica cronico aguda agudo
+enfermedad pulmonar obstructiva epoc asma neumonia bronquitis bronquiolitis infeccion urinaria
+sepsis septico shock cancer carcinoma adenocarcinoma tumor neoplasia linfoma leucemia mieloma
+metastasis anemia hipotiroidismo hipertiroidismo dislipidemia obesidad colecistitis colelitiasis
+apendicitis pancreatitis cirrosis hepatitis gastritis ulcera fractura accidente cerebrovascular
+acv ave infarto miocardio iam arritmia fibrilacion auricular taquicardia bradicardia trombosis
+embolia tromboembolismo covid sars influenza tuberculosis vih sida depresion ansiedad demencia
+epilepsia migrana artritis artrosis osteoporosis lupus psoriasis dermatitis celulitis absceso
+hernia litiasis hidronefrosis prostatitis endometriosis preeclampsia eclampsia gestacion embarazo
+parto cesarea aborto sindrome sindromes trastorno sindrome dolor fiebre tos disnea cefalea
+nauseas vomitos diarrea constipacion mareo sincope convulsion edema hematoma herida contusion
+politraumatismo tec hemorragia hipoglicemia hiperglicemia cetoacidosis hiponatremia hipokalemia
+# --- epónimos (parecen apellidos)
+alzheimer parkinson crohn hodgkin down guillain barre cushing addison graves hashimoto kawasaki
+raynaud huntington sjogren wilson gilbert asperger tourette kaposi ewing wilms marfan turner
+klinefelter meniere bell babinski glasgow apgar
+# --- fármacos
+paracetamol ibuprofeno ketorolaco tramadol morfina metamizol diclofenaco naproxeno ketoprofeno
+omeprazol pantoprazol ranitidina losartan enalapril captopril amlodipino nifedipino atenolol
+propranolol carvedilol bisoprolol furosemida espironolactona hidroclorotiazida metformina
+insulina glibenclamida sitagliptina atorvastatina simvastatina rosuvastatina aspirina
+clopidogrel warfarina acenocumarol heparina enoxaparina apixaban rivaroxaban dabigatran
+amoxicilina ampicilina ceftriaxona cefazolina cefuroxima azitromicina claritromicina
+ciprofloxacino levofloxacino vancomicina metronidazol clindamicina gentamicina meropenem
+piperacilina tazobactam cotrimoxazol nitrofurantoina fluconazol aciclovir oseltamivir
+prednisona prednisolona hidrocortisona dexametasona metilprednisolona salbutamol ipratropio
+budesonida fluticasona levotiroxina sertralina fluoxetina escitalopram clonazepam alprazolam
+lorazepam diazepam quetiapina risperidona haloperidol olanzapina pregabalina gabapentina
+levetiracetam valproato carbamazepina fenitoina ondansetron metoclopramida domperidona
+lactulosa loperamida suero fisiologico ringer lactato potasio sodio calcio magnesio hierro
+acido folico vitamina
+# --- anatomía y exámenes
+abdomen torax cabeza cuello columna lumbar cervical dorsal pelvis rodilla cadera hombro tobillo
+muñeca pulmon pulmones corazon higado rinon rinones vesicula pancreas bazo estomago colon
+hemograma glicemia creatinina urea electrolitos orina urocultivo hemocultivo pcr vhs troponina
+radiografia ecografia tomografia tac resonancia rnm electrocardiograma ecg ecocardiograma
+endoscopia colonoscopia biopsia
+# --- inglés
+history physical examination exam assessment plan diagnosis diagnoses medications medication
+allergies admission discharge summary hospital course follow followup review systems chief
+complaint impression procedure procedures labs laboratory imaging results report note
+department unit emergency icu ward floor clinic service internal medicine pediatrics surgery
+cardiology neurology oncology psychiatry radiology nursing pharmacy
+patient mr mrs ms miss dr doctor physician nurse attending resident md rn np
+monday tuesday wednesday thursday friday saturday sunday january february march april may june
+july august september october november december
+hypertension heart failure chronic acute kidney disease pulmonary obstructive copd asthma
+pneumonia infection urinary tract sepsis cancer carcinoma tumor lymphoma leukemia anemia
+hypothyroidism hyperlipidemia obesity cholecystitis appendicitis pancreatitis cirrhosis fracture
+stroke myocardial infarction atrial fibrillation thrombosis embolism depression anxiety dementia
+epilepsy migraine arthritis osteoarthritis osteoporosis syndrome pain fever cough dyspnea
+headache nausea vomiting diarrhea
+acetaminophen ibuprofen aspirin metformin insulin lisinopril losartan amlodipine metoprolol
+atorvastatin furosemide warfarin heparin amoxicillin ceftriaxone azithromycin vancomycin
+prednisone albuterol levothyroxine sertraline
+chest head neck spine abdomen pelvis knee hip shoulder lung lungs heart liver kidney bladder
+glucose creatinine troponin xray ultrasound ct mri ecg ekg echocardiogram biopsy
+# --- calificativos genéricos de instituciones (no identifican por sí solos)
+regional provincial comunal municipal nacional central base universitario universitaria militar
+naval publico publica privado privada docente asistencial especialidades familiar salud
+regional general memorial community county university medical teaching
