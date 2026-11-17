@@ -32,8 +32,9 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
   volver a abrir. Antes el perfil era persistente y genérico (`%APPDATA%\pywebview`): caché, Local
   Storage y posibles volcados de Crashpad.
 - Informes de fallos de WebView2 desactivados (`--disable-breakpad --disable-crash-reporter`, añadidos
-  a las propiedades de creación de pywebview: la variable de entorno sola no surtía efecto, según la
-  sonda en el CI) y
+  a las propiedades de creación de pywebview antes de que WebView2 las lea: la variable de entorno
+  sola no surtía efecto, según la sonda en el CI; el runtime igual lanza `crashpad-handler`, cuyos
+  volcados quedarían dentro del perfil efímero) y
   Windows Error Reporting sin el heap del proceso (`WerSetFlags`).
 - Preferencias en `%APPDATA%\AnonimizeMedical\prefs.json`, escritas por el backend con una lista
   cerrada de claves y tipos: cualquier otra cosa se descarta.

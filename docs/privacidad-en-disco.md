@@ -39,8 +39,13 @@ pueden contener la página, es decir, texto clínico. Ahora:
   almacenamiento persistentes, en una carpeta propia;
 - la carpeta se borra al cerrar (PyWebView y, además, la aplicación con reintentos) y también **al
   iniciar**, por si un cierre abrupto (corte de luz, proceso terminado) dejó restos;
-- el navegador de WebView2 se inicia con `--disable-breakpad --disable-crash-reporter`
-  (variable `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`);
+- el navegador de WebView2 se inicia con `--disable-breakpad --disable-crash-reporter`. pywebview
+  fija sus propios argumentos y la variable `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` no surtía
+  efecto (lo mostró la sonda); se añaden a las propiedades de creación antes de que WebView2 las
+  lea (`appdata.harden_edgechromium`). **Aun así, el runtime de WebView2 lanza su proceso
+  `crashpad-handler`**: si el motor fallara, un volcado podría escribirse en
+  `...\WebView2\EBWebView\Crashpad`, que se borra al cerrar o al volver a abrir la aplicación;
+  su envío a Microsoft depende de la configuración de datos de diagnóstico de Windows;
 - el proceso de Python llama a `WerSetFlags(WER_FAULT_REPORTING_FLAG_NOHEAP)`: si falla, el
   informe de Windows Error Reporting no incluye el *heap* (donde están los textos). Sólo afecta a
   este proceso; no cambia la configuración del sistema.
@@ -115,3 +120,29 @@ archivo de paginación ni carpetas del sistema fuera del perfil del usuario.
 **Pruebas unitarias** (`tests/test_disk_privacy.py`): validación de `prefs.json`, limpieza del perfil
 (también si la ventana falla), argumentos de WebView2, WER sin heap, ausencia de temporales y logs a
 archivo, y la sonda completa con la API real (OCR incluido) y una ventana simulada.
+
+## Evidencia del CI de Windows
+
+Ejecución [43994290624](https://github.com/ElRonatri/Anonimize-Medical.Info/actions/runs/43994290624)
+(commit `3eb01cb`), paso «Privacidad en disco» en las cuatro variantes (base, ocr, tesseract, ner),
+con el `.exe` congelado y la ventana real de WebView2 en `windows-latest`:
+
+| Comprobación | Resultado |
+|---|---|
+| Control positivo del escáner (centinela escrito a propósito en UTF-16) | encontrado ✔ (el escáner funciona) |
+| Flujo real en la ventana: aviso → pegar texto con el centinela → anonimizar → copiar | ✔; el centinela no aparece en el resultado |
+| OCR en procesos paralelos (variante ocr: RapidOCR; tesseract: Tesseract) | leyó el centinela ✔; salida anonimizada ✔ (en base/ner no hay motor OCR) |
+| Exportaciones md/txt/docx/json | sin el centinela ✔ |
+| Perfil de WebView2 durante el uso | 186 archivos, con Crashpad y Local Storage |
+| Perfil al cerrar | borrado ✔ |
+| Cierre abrupto simulado | el perfil queda → la siguiente ejecución lo borra ✔ |
+| Procesos `AnonimizeMedical` vivos tras el cierre abrupto | 0 ✔ (antes de la corrección quedaban 2 y el paso se colgó 6 h) |
+| Línea de comandos del navegador | `--user-data-dir=...\AnonimizeMedical\WebView2\EBWebView --disable-breakpad --disable-crash-reporter ...` ✔ |
+| Proceso `crashpad-handler` | **sigue presente (1)**: lo lanza el runtime de WebView2 |
+| Centinela en `%TEMP%`, `%LOCALAPPDATA%`, `%APPDATA%` (UTF-8/UTF-16) | **no encontrado** ✔ |
+| Archivos de la aplicación tras cerrar | sólo `%APPDATA%\AnonimizeMedical\prefs.json` (586 bytes; claves: exportGeneric, options, responsibleUseDismissed, theme, uiLanguage) |
+
+**Sólo documentado (no verificable en el CI):** portapapeles e historial (`Win + V`), archivos
+recientes / MRU de los diálogos de Windows (el CI no los abre), archivo de paginación e
+hibernación, nombres de archivos exportados, y el contenido de un volcado de Crashpad ante un
+fallo real del motor (no se provoca en la prueba).
