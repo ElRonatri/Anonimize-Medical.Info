@@ -51,6 +51,12 @@ export default async function ui({ browser, url, fixture, check, screenshots }) 
       const fmt = await page.evaluate(() => window.__calls.filter((c) => c[0] === 'export_file').map((c) => c[1][1]).pop())
       check(fmt === 'txt', `Enter exporta la opción enfocada (${fmt})`)
 
+      // PDF censurado: sólo para documentos que vienen de un PDF (aquí, texto pegado).
+      await page.getByRole('button', { name: 'Exportar' }).click()
+      check((await page.getByRole('menuitem', { name: /PDF censurado/ }).count()) === 0, 'sin «PDF censurado» para texto pegado')
+      await page.keyboard.press('Escape')
+      check((await page.getByText('Calidad de imagen').count()) === 1, 'opciones del PDF censurado visibles')
+
       const row = page.locator('li:has(button[aria-current])')
       check((await row.locator('button').count()) === 2 && (await row.locator('[role=button]').count()) === 0, 'fila de documento sin controles anidados')
       check((await row.locator('button').nth(1).getAttribute('aria-label')).startsWith('Quitar'), 'botón quitar nombra el documento')

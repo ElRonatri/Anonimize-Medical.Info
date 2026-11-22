@@ -16,7 +16,7 @@ epicrisis, informes, etc.), **anonimiza los datos del paciente** y devuelve el r
 | | |
 |---|---|
 | Entrada | **varios PDF a la vez** (arrastrar y soltar o diálogo nativo), TXT, o texto pegado. Se procesan en cola y **en paralelo** (procesos configurables), con avance por archivo y página, tiempo restante estimado y cancelación inmediata |
-| Salida | Markdown (títulos, listas, tablas de laboratorio) o texto plano; copiar o **exportar a `.md`, `.txt`, Word `.docx` o `.json`**, un documento o todos a una carpeta (con nombres genéricos opcionales) |
+| Salida | Markdown (títulos, listas, tablas de laboratorio) o texto plano; copiar o **exportar a `.md`, `.txt`, Word `.docx` o `.json`**, un documento o todos a una carpeta (con nombres genéricos opcionales). **PDF censurado:** el mismo PDF, página por página, con los datos tapados de forma irreversible ([docs/pdf-censurado.md](docs/pdf-censurado.md)) |
 | Datos detectados | nombre del paciente, familiares y contactos, RUT/RUN, DNI, NIE, CURP, cédula, SSN, pasaporte, N° de ficha / historia clínica / MRN, fecha de nacimiento, teléfonos, correos, direcciones y localidades, URLs, IPs |
 | Opcional | nombres de profesionales (médicos, firmantes), todas las fechas, términos personalizados a ocultar |
 | Excepciones | lista de términos que **nunca** se anonimizan (instituciones, fármacos, palabras ocultadas por error) |

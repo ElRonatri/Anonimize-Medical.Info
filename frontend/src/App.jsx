@@ -30,7 +30,12 @@ const DEFAULT_OPTIONS = {
   ner_threshold: 0.8,
   custom_terms: [],
   whitelist: [],
+  pdf_dpi: 200,
+  pdf_labels: true,
 }
+
+// Documento que proviene de un PDF (se puede recrear censurado página por página).
+const isPdfItem = (item) => item?.kind === 'file' && /\.pdf$/i.test(item?.name || '')
 
 const POLL_MS = 250
 
@@ -111,7 +116,12 @@ export default function App() {
     [options, excluded],
   )
   // max_workers sólo afecta a lotes nuevos: no requiere re-anonimizar lo ya procesado.
-  const optionsKey = JSON.stringify({ ...requestOptions, max_workers: undefined })
+  const optionsKey = JSON.stringify({
+    ...requestOptions,
+    max_workers: undefined,
+    pdf_dpi: undefined, // sólo afectan al PDF censurado, no al texto
+    pdf_labels: undefined,
+  })
 
   // ---------------------------------------------------------------- utilidades de estado
   const errorText = useCallback(
@@ -317,10 +327,34 @@ export default function App() {
     }
   }
 
+  // Informe del PDF censurado: lo que el usuario debe revisar (sin valores, sólo marcadores).
+  const pdfReportMessage = (report, prefix) => {
+    const notes = [prefix, t('pdfSaved', report.redactions ?? 0, report.pages ?? 0)]
+    let kind = 'success'
+    if (report.unlocated?.length) {
+      notes.push(t('pdfUnlocated', report.unlocated.join(', ')))
+      kind = 'warning'
+    }
+    if (report.page_errors?.length || report.page_errors > 0) {
+      notes.push(t('pdfPageErrors'))
+      kind = 'warning'
+    }
+    if (report.edited_ignored) {
+      notes.push(t('pdfEditedIgnored'))
+      kind = 'warning'
+    }
+    if (report.annotations_removed) notes.push(t('pdfAnnotationsRemoved', report.annotations_removed))
+    const reminder = takeReminder()
+    if (reminder) notes.push(reminder)
+    return { kind, text: notes.filter(Boolean).join(' ') }
+  }
+
   const exportOne = async (fmt) => {
     if (!selected || !result) return
     const res = await backend.exportFile(docPayload(selected), fmt, requestOptions)
-    if (res?.ok) {
+    if (res?.ok && fmt === 'pdf' && res.report) {
+      setMessage(pdfReportMessage(res.report, ''))
+    } else if (res?.ok) {
       const reminder = takeReminder()
       if (reminder) setMessage({ kind: 'info', text: reminder })
     } else if (!res?.cancelled) setMessage({ kind: 'error', text: errorText(res?.error) })
@@ -328,7 +362,10 @@ export default function App() {
 
   const exportAll = async (fmt, generic) => {
     const res = await backend.exportBatch(doneItems.map(docPayload), fmt, requestOptions, generic)
-    if (res?.ok) {
+    if (res?.ok && fmt === 'pdf' && res.report) {
+      const skipped = res.skipped ? t('pdfSkipped', res.skipped) : ''
+      setMessage(pdfReportMessage(res.report, `${t('exportedMany', res.count)} ${res.folder} ${skipped}`.trim()))
+    } else if (res?.ok) {
       const reminder = takeReminder()
       const done = `${t('exportedMany', res.count)} ${res.folder}`
       setMessage({ kind: 'success', text: reminder ? `${done} ${reminder}` : done })
@@ -434,6 +471,8 @@ export default function App() {
             onExport={exportOne}
             onExportAll={exportAll}
             doneCount={doneItems.length}
+            pdfAvailable={isPdfItem(selected)}
+            pdfCount={doneItems.filter(isPdfItem).length}
           />
 
           {result && (

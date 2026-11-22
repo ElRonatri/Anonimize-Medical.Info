@@ -75,6 +75,33 @@ def _decode(data: bytes) -> str:
 
 # --------------------------------------------------------------------------- PDF
 
+def unrotated_copy(data: bytes) -> bytes | None:
+    """Copia en memoria con /Rotate=0 en todas las páginas, o None si ninguna está rotada.
+
+    Una página con /Rotate (p. ej. un informe apaisado) guarda su texto en la orientación natural
+    de lectura; pdfplumber, en cambio, entrega las coordenadas ya rotadas y el texto sale
+    desordenado o al revés (y entonces los nombres no se detectan). La capa de texto se lee de
+    esta copia; el OCR sigue usando la página rotada, que es la que deja derecho un escaneo.
+    """
+    import pypdfium2 as pdfium
+
+    try:
+        doc = pdfium.PdfDocument(data)
+    except Exception:
+        return None
+    try:
+        pages = [doc[i] for i in range(len(doc))]
+        if not any(p.get_rotation() for p in pages):
+            return None
+        for p in pages:
+            p.set_rotation(0)
+        out = io.BytesIO()
+        doc.save(out)
+        return out.getvalue()
+    finally:
+        doc.close()
+
+
 def _load_pdf(name: str, data: bytes, ocr_mode: str, ocr_engine: str,
               progress: Progress | None) -> Document:
     import pdfplumber
@@ -82,18 +109,20 @@ def _load_pdf(name: str, data: bytes, ocr_mode: str, ocr_engine: str,
     doc = Document(name=name)
     try:
         pdf = pdfplumber.open(io.BytesIO(data))
+        flat = unrotated_copy(data)
+        text_pdf = pdfplumber.open(io.BytesIO(flat)) if flat is not None else pdf
     except Exception as exc:  # pdfminer lanza varios tipos distintos
         raise ExtractionError(f"invalid_pdf:{exc}") from exc
 
     engine = ocr.pick_engine(ocr_engine) if ocr_mode != OCR_OFF else None
-    with pdf:
+    with pdf, text_pdf:
         total = len(pdf.pages)
         for index, pdf_page in enumerate(pdf.pages, start=1):
             if progress:
                 progress(index, total, "text")
             page = Page(number=index)
             try:
-                page.blocks = _extract_page_blocks(pdf_page)
+                page.blocks = _extract_page_blocks(text_pdf.pages[index - 1])
             except Exception as exc:  # una página dañada no debe tumbar el documento
                 log_exception(log, "Error extrayendo la página %s", exc, index)
                 doc.warnings.append(f"page_error:{index}:{exc}")

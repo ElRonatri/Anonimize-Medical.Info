@@ -7,6 +7,21 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
+### Añadido
+- **PDF censurado** (Exportar → «PDF censurado»): recrea cada PDF página por página, con el mismo
+  tamaño y aspecto, y tapa con recuadros negros (opcionalmente con su marcador) los mismos datos que
+  se ocultan en el texto. Censura irreversible: el resultado sólo contiene imágenes de las páginas
+  (sin capa de texto, metadatos, anotaciones ni formularios del original). Funciona con páginas con
+  texto y escaneadas (posiciones del OCR), uno a uno o por lotes; avisa por marcador si algún dato
+  no se pudo ubicar. Calidad 150/200/300 ppp. Sin dependencias nuevas (pypdfium2 y Pillow ya
+  estaban). Ver `docs/pdf-censurado.md`.
+- La autoprueba del ejecutable y la sonda de privacidad en disco incluyen PDF censurados.
+
+### Corregido
+- **Páginas con `/Rotate`** (p. ej. apaisadas): el texto se extraía desordenado o al revés y los
+  nombres **no se ocultaban** en el texto exportado. Ahora la capa de texto se lee en su
+  orientación natural (prueba con control negativo para 90/180/270°).
+
 ## [1.1.0] - 2026-11-17
 
 Versión centrada en **privacidad verificable**, rendimiento y accesibilidad: el CI de Windows

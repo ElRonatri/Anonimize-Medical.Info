@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { BrainCircuit, Cpu, ScanText, ShieldOff, SlidersHorizontal } from 'lucide-react'
+import { BrainCircuit, Cpu, FileLock, ScanText, ShieldOff, SlidersHorizontal } from 'lucide-react'
 import { useI18n } from '../i18n.jsx'
 import { Button, Card, Segmented, Toggle, cx } from './ui.jsx'
 import RegionSelect from './RegionSelect.jsx'
@@ -243,6 +243,26 @@ export default function OptionsPanel({ options, onChange, info }) {
         ) : (
           <p className="text-[11px] leading-snug text-slate-600 dark:text-slate-400">{t('nerUnavailable')}</p>
         )}
+
+        <SectionTitle icon={FileLock}>{t('sectionPdf')}</SectionTitle>
+        <Segmented
+          label={t('pdfQuality')}
+          value={String(options.pdf_dpi ?? 200)}
+          onChange={(v) => set('pdf_dpi')(Number(v))}
+          options={[
+            { value: '150', label: t('pdfQualityLight'), title: '150 ppp' },
+            { value: '200', label: t('pdfQualityStandard'), title: '200 ppp' },
+            { value: '300', label: t('pdfQualityHigh'), title: '300 ppp' },
+          ]}
+        />
+        <Toggle
+          id="pdf-labels"
+          checked={options.pdf_labels ?? true}
+          onChange={set('pdf_labels')}
+          label={t('pdfLabels')}
+          hint={t('pdfLabelsHint')}
+        />
+        <p className="text-[11px] leading-snug text-slate-600 dark:text-slate-400">{t('pdfHint')}</p>
 
         <SectionTitle icon={Cpu}>{t('sectionPerformance')}</SectionTitle>
         <label className="block">

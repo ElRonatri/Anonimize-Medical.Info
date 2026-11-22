@@ -676,6 +676,17 @@ class Redactor:
                 merged.append(span)
         return merged
 
+    def locate(self, text: str) -> list[tuple[int, int, str]]:
+        """Tramos a ocultar en `text`: (inicio, fin, marcador). No modifica el reporte.
+
+        Usa las mismas reglas que `redact` (y los mismos números de marcador si el valor ya se
+        vio): sirve para ubicar los datos en otra representación del documento (PDF censurado).
+        """
+        if not text or not text.strip():
+            return []
+        spans = self._merge_names(text, self._resolve(self._find_spans(text)))
+        return [(s.start, s.end, self.placeholder(s.category, s.key, s.label)) for s in spans]
+
     def redact(self, text: str) -> str:
         if not text or not text.strip():
             return text

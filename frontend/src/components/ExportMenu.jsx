@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { Check, ChevronDown, Download, FileCode2, FileJson, FileText, FileType2, Loader2 } from 'lucide-react'
+import { Check, ChevronDown, Download, FileCode2, FileJson, FileLock, FileText, FileType2, Loader2 } from 'lucide-react'
 import { useI18n } from '../i18n.jsx'
 import { loadPref, savePref } from '../storage.js'
 import { Button, cx } from './ui.jsx'
@@ -10,8 +10,10 @@ const FORMATS = [
   { id: 'docx', icon: FileType2 },
   { id: 'json', icon: FileJson },
 ]
+// PDF censurado: recrea el PDF original página por página con los datos tapados.
+const PDF_FORMAT = { id: 'pdf', icon: FileLock }
 
-export default function ExportMenu({ onExport, onExportAll, doneCount }) {
+export default function ExportMenu({ onExport, onExportAll, doneCount, pdfAvailable = false, pdfCount = 0 }) {
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -128,6 +130,7 @@ export default function ExportMenu({ onExport, onExportAll, doneCount }) {
             {t('exportCurrent')}
           </div>
           {FORMATS.map((fmt) => item(fmt, () => onExport(fmt.id)))}
+          {pdfAvailable && item(PDF_FORMAT, () => onExport(PDF_FORMAT.id))}
 
           {doneCount > 1 && (
             <>
@@ -136,6 +139,7 @@ export default function ExportMenu({ onExport, onExportAll, doneCount }) {
                 {t('exportAll', doneCount)}
               </div>
               {FORMATS.map((fmt) => item(fmt, () => onExportAll(fmt.id, generic)))}
+              {pdfCount > 0 && item(PDF_FORMAT, () => onExportAll(PDF_FORMAT.id, generic))}
               <button
                 type="button"
                 role="menuitemcheckbox"

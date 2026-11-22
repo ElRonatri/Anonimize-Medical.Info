@@ -199,6 +199,34 @@ def run(config: Any, out_dir: Path, sentinel: str, run_window: Callable[..., Non
             checks["exports_anonymized"] = not leaked
 
             report["profile_during_run"] = _profile_snapshot(profile)
+            # PDF censurado: uno con capa de texto y los escaneados (si hubo OCR), todos con el centinela.
+            report["stage"] = "PDF censurado"
+            from anonymizer.redact_pdf import synthetic_text_pdf
+
+            text_pdf = synthetic_text_pdf([f"Paciente: {sentinel}", "RUT: 15.234.567-K",
+                                           "Diagnostico: Neumonia adquirida en la comunidad."])
+            job = api.start_batch([{"name": "texto_sintetico.pdf", "data": base64.b64encode(text_pdf).decode()}],
+                                  {"ocr_mode": "off"})
+            state = api.get_job(job["job_id"])
+            end = time.monotonic() + 120
+            while not state["done"] and time.monotonic() < end:
+                time.sleep(0.1)
+                state = api.get_job(job["job_id"])
+            pdf_items = state["items"] + items
+            pdf_reports = []
+            for n, pdf_item in enumerate(pdf_items):
+                res = api._write_redacted_pdf(export_dir / f"censurado_{n}.pdf", {"id": pdf_item["id"]}, {})
+                out = (export_dir / f"censurado_{n}.pdf").read_bytes() if res.get("ok") else b""
+                pdf_reports.append({"ok": bool(res.get("ok")), "redactions": res.get("report", {}).get("redactions", 0),
+                                    "unlocated": len(res.get("report", {}).get("unlocated", [])),
+                                    "sentinel_in_file": _contains(out, token)})
+            report["redacted_pdfs"] = pdf_reports
+            checks["redacted_pdf_text_layer"] = bool(pdf_reports) and pdf_reports[0]["ok"] \
+                and pdf_reports[0]["redactions"] >= 1 and pdf_reports[0]["unlocated"] == 0
+            checks["redacted_pdfs_without_sentinel"] = all(r["ok"] and not r["sentinel_in_file"] for r in pdf_reports)
+            if report.get("ocr", {}).get("sentinel_read_by_ocr"):
+                checks["redacted_pdf_scanned"] = all(r["redactions"] >= 1 for r in pdf_reports[1:])
+
             report["stage"] = "ventana abierta (muestreo del CI)"
             time.sleep(hold)  # el CI inspecciona los procesos de WebView2 mientras tanto
         except Exception as exc:  # el informe debe escribirse igual

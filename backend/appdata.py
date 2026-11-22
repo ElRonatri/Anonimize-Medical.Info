@@ -174,6 +174,7 @@ OPTION_RULES: dict[str, Any] = {
     "remove_repeated": _bool, "page_markers": _bool, "aggressive_numbers": _bool,
     "ner": _bool, "ner_orgs": _bool,
     "max_workers": _workers, "ner_threshold": _threshold, "whitelist": _whitelist,
+    "pdf_dpi": lambda v: v in (150, 200, 300) and not isinstance(v, bool), "pdf_labels": _bool,
 }
 
 

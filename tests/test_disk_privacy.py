@@ -230,12 +230,15 @@ def test_privacy_probe_end_to_end_with_fake_window(data_dir, tmp_path, monkeypat
     assert SENTINEL.split()[-1] not in report_raw  # el informe nunca contiene el centinela
     assert code == 0, report
     assert report["checks"]["exports_anonymized"] and report["checks"]["profile_removed_on_close"]
-    assert {p.name for p in (out / "export").iterdir()} == {"resultado.md", "resultado.txt",
-                                                           "resultado.docx", "resultado.json"}
+    assert {p.name for p in (out / "export").iterdir()} == {
+        "resultado.md", "resultado.txt", "resultado.docx", "resultado.json",
+        "censurado_0.pdf", "censurado_1.pdf", "censurado_2.pdf"}  # PDF con texto + 2 escaneados
+    assert report["checks"]["redacted_pdf_text_layer"] and report["checks"]["redacted_pdfs_without_sentinel"]
     if report["ocr_engines"]:
         assert report["ocr"]["statuses"] == ["done", "done"] and report["ocr"]["in_worker_processes"]
         assert report["ocr"]["sentinel_read_by_ocr"]  # el OCR leyó el centinela... y no salió en el resultado
         assert report["checks"]["ocr_output_anonymized"]
+        assert report["checks"]["redacted_pdf_scanned"]  # los escaneados también se censuran (OCR)
 
 
 def test_probe_requires_full_sentinel():
