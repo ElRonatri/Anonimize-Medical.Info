@@ -119,6 +119,7 @@ class Options:
     region: str = "general"  # general | all | latam | europe | ... | código ISO de país
     aggressive_numbers: bool = False  # ocultar cualquier secuencia de >= 7 dígitos
     custom_terms: list[str] = field(default_factory=list)
+    only_custom: bool = False  # censurar EXACTAMENTE custom_terms: sin detección automática
     whitelist: list[str] = field(default_factory=list)  # términos que nunca se anonimizan
     ner: bool = False  # segunda pasada con NER (sólo variante de build --ner)
     ner_orgs: bool = False  # además, organizaciones (hospitales, clínicas...)
@@ -482,6 +483,12 @@ def build_knowledge(text: str, opts: Options, lang: str | None = None) -> Knowle
     excluded = {norm(v) for v in opts.exclude} | {norm_digits(v) for v in opts.exclude if norm_digits(v)}
     knowledge = Knowledge(excluded, opts.whitelist)
 
+    if opts.only_custom:  # sólo las palabras del usuario: ni reglas, ni patrones, ni NER
+        knowledge.ner_summary = {"used": False}
+        for term in opts.custom_terms:
+            knowledge.add_custom(term)
+        return knowledge.compile()
+
     _extract_labeled(knowledge, text, opts)
 
     if opts.anonymize_professionals:
@@ -593,6 +600,8 @@ class Redactor:
     def _find_spans(self, text: str) -> list[Span]:
         spans: list[Span] = []
         self._literal_spans(text, spans)
+        if self.opts.only_custom:  # sin correos, teléfonos, identificadores ni fechas automáticos
+            return spans
 
         # Filtros rápidos: casi todos los patrones necesitan dígitos, "@" o "www/http".
         has_digit = _DIGIT_RE.search(text) is not None

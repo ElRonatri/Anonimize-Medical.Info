@@ -171,3 +171,41 @@ def test_aggressive_numbers_do_not_override_recognized_data():
     result = run(text, output_format="text", aggressive_numbers=True)
     assert "[N_FICHA_1]" in result["text"]
     assert "[NUMERO_1]" in result["text"] and "1.234.567" not in result["text"]
+
+
+# --------------------------------------------------------------------------- palabras a censurar
+
+CENSOR_TEXT = ("Paciente: Juan Pérez Soto\nRUT: 15.234.567-K\nCorreo: jp@correo.cl\n"
+               "Juan visitó a Juanita. Ficha 12345678 y 123456789. Derivado a Clínica Los Andes.")
+
+
+def test_custom_terms_are_hidden_in_addition_to_automatic_detection():
+    out = anonymize_document(load_text(CENSOR_TEXT), {"custom_terms": ["clinica los andes"],
+                                                      "output_format": "text", "region": "CL"})["text"]
+    assert "Clínica Los Andes" not in out and "[OCULTO_1]" in out
+    assert "Pérez" not in out and "15.234.567-K" not in out and "jp@correo.cl" not in out  # automático sigue
+
+
+def test_only_custom_hides_exactly_the_list():
+    result = anonymize_document(load_text(CENSOR_TEXT), {
+        "custom_terms": ["Juan", "12345678", "CLINICA LOS ANDES"], "only_custom": True,
+        "output_format": "text", "region": "CL"})
+    out = result["text"]
+    # Sólo la lista: palabra completa, sin importar mayúsculas ni tildes.
+    assert "Juanita" in out and "123456789" in out  # no son la palabra completa
+    assert "Clínica Los Andes" not in out and "12345678 " not in out
+    # Nada automático: el resto queda visible.
+    assert "Pérez Soto" in out and "15.234.567-K" in out and "jp@correo.cl" in out
+    assert {e["category"] for e in result["entities"]} == {"CUSTOM"}
+
+
+def test_only_custom_with_empty_list_hides_nothing():
+    result = anonymize_document(load_text(CENSOR_TEXT), {"only_custom": True, "output_format": "text"})
+    assert result["replacements"] == 0 and result["text"].strip() == CENSOR_TEXT.strip()
+
+
+def test_only_custom_respects_restored_values():
+    out = anonymize_document(load_text(CENSOR_TEXT), {
+        "custom_terms": ["Juan", "Juanita"], "only_custom": True, "exclude": ["Juanita"],
+        "output_format": "text"})["text"]
+    assert "Juanita" in out and "Juan visitó" not in out

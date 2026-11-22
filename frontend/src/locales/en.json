@@ -51,9 +51,6 @@
   "regionHintKeywordsOnly": "No dedicated format: documents are detected by keyword (e.g. “CC 1020304050”, “DNI 45678912”) and passports.",
   "optAggressive": "Hide any long number",
   "optAggressiveHint": "Sequences of 7+ digits (dates are kept). May hide clinical values.",
-  "customTerms": "Additional terms to hide",
-  "customTermsHint": "One per line: names, institutions or other data that was not detected. Not saved on exit.",
-  "customTermsPlaceholder": "e.g. Mercy General Hospital",
   "apply": "Apply",
   "dropTitleMulti": "Drop one or more PDFs here",
   "addFiles": "Add files",
@@ -120,7 +117,7 @@
     "other": "{0} files exported."
   },
   "sectionDetection": "Detection",
-  "sectionTerms": "Custom terms",
+  "sectionTerms": "Exceptions",
   "sectionOutput": "Output",
   "ocrTitle": "OCR (scanned documents)",
   "ocrMode": "Mode",
@@ -244,5 +241,17 @@
   "pdfSkipped": {
     "one": "({0} document without an original PDF was not exported.)",
     "other": "({0} documents without an original PDF were not exported.)"
-  }
+  },
+  "censorTitle": "Words to redact",
+  "censorLabel": "One per line: exact words or phrases to hide",
+  "censorPlaceholder": "E.g.:\nJohn Smith\nSt. Mary Clinic\n12345678",
+  "censorHint": "Hidden as [REDACTED] in the text and in the redacted PDF, regardless of case or accents, whole words only. Not saved on exit.",
+  "censorFound": {
+    "one": "{0} match hidden in this document.",
+    "other": "{0} matches hidden in this document."
+  },
+  "censorMissing": "No matches: {0}.",
+  "censorOnly": "Only these words",
+  "censorOnlyHint": "Turns off automatic detection: exactly your list is redacted.",
+  "censorOnlyWarning": "Automatic detection is off: only the words in your list are hidden. Names, IDs, phones or other data not in it remain visible."
 }

@@ -249,3 +249,13 @@ def test_text_export_of_rotated_pages_hides_the_name(rotation, monkeypatch):
     monkeypatch.setattr(extract, "unrotated_copy", lambda _: None)
     leaked = anonymize_document(load_bytes("x.pdf", data, ocr_mode="off"), {})["text"]
     assert "Vadremkuz" in leaked or "zukmerdaV" in leaked  # a 180°/270° sale escrito al revés
+
+
+def test_only_custom_words_in_redacted_pdf():
+    """En el PDF censurado también se tapa exactamente la lista del usuario, y nada más."""
+    data = make_pdf()
+    doc = load_bytes("x.pdf", data, ocr_mode="off")
+    out, report = redact_pdf(data, doc, {"custom_terms": ["vadremkuz"], "only_custom": True}, labels=False)
+    assert report["redactions"] == 2 and report["unlocated"] == []  # línea del paciente y evolución
+    out_all, report_all = redact_pdf(data, doc, {"region": "CL"}, labels=False)
+    assert report_all["redactions"] > report["redactions"]  # en modo normal también RUT, nombre completo...

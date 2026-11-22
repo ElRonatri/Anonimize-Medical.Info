@@ -294,14 +294,6 @@ export default function OptionsPanel({ options, onChange, info }) {
           onApply={set('whitelist')}
           tone="allow"
         />
-        <TermList
-          id="custom-terms"
-          label={t('customTerms')}
-          hint={t('customTermsHint')}
-          placeholder={t('customTermsPlaceholder')}
-          value={options.custom_terms}
-          onApply={set('custom_terms')}
-        />
       </div>
     </Card>
   )

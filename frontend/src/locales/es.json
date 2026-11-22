@@ -51,9 +51,6 @@
   "regionHintKeywordsOnly": "Sin formato propio: se detectan documentos por palabra clave (p. ej. «CC 1020304050», «DNI 45678912») y pasaportes.",
   "optAggressive": "Ocultar cualquier número largo",
   "optAggressiveHint": "Secuencias de 7 o más dígitos (respeta las fechas). Puede ocultar valores clínicos.",
-  "customTerms": "Términos adicionales a ocultar",
-  "customTermsHint": "Uno por línea: nombres, instituciones u otros datos que no se detectaron. No se guardan al cerrar.",
-  "customTermsPlaceholder": "Ej.: Clínica Los Andes",
   "apply": "Aplicar",
   "dropTitleMulti": "Arrastra uno o varios PDF aquí",
   "addFiles": "Agregar archivos",
@@ -120,7 +117,7 @@
     "other": "Se exportaron {0} archivos."
   },
   "sectionDetection": "Detección",
-  "sectionTerms": "Términos personalizados",
+  "sectionTerms": "Excepciones",
   "sectionOutput": "Salida",
   "ocrTitle": "OCR (documentos escaneados)",
   "ocrMode": "Modo",
@@ -244,5 +241,17 @@
   "pdfSkipped": {
     "one": "({0} documento sin PDF original no se exportó.)",
     "other": "({0} documentos sin PDF original no se exportaron.)"
-  }
+  },
+  "censorTitle": "Palabras a censurar",
+  "censorLabel": "Una por línea: palabras o frases exactas que deben ocultarse",
+  "censorPlaceholder": "Ej.:\nJuan Pérez\nClínica Los Andes\n12345678",
+  "censorHint": "Se ocultan como [OCULTO] en el texto y en el PDF censurado, sin importar mayúsculas ni tildes, y sólo como palabra completa. No se guardan al cerrar.",
+  "censorFound": {
+    "one": "{0} coincidencia oculta en este documento.",
+    "other": "{0} coincidencias ocultas en este documento."
+  },
+  "censorMissing": "Sin coincidencias: {0}.",
+  "censorOnly": "Sólo estas palabras",
+  "censorOnlyHint": "Desactiva la detección automática: se censura exactamente tu lista.",
+  "censorOnlyWarning": "Detección automática desactivada: sólo se ocultan las palabras de tu lista. Nombres, RUT, teléfonos u otros datos que no estén en ella quedan visibles."
 }

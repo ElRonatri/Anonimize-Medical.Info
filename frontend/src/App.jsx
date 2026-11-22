@@ -6,6 +6,7 @@ import OptionsPanel from './components/OptionsPanel.jsx'
 import ResultPanel from './components/ResultPanel.jsx'
 import EntitiesPanel from './components/EntitiesPanel.jsx'
 import JobProgress from './components/JobProgress.jsx'
+import CensorPanel from './components/CensorPanel.jsx'
 import ResponsibleUseDialog from './components/ResponsibleUseDialog.jsx'
 import { backend, copyText, getApi } from './api.js'
 import { useI18n } from './i18n.jsx'
@@ -29,6 +30,7 @@ const DEFAULT_OPTIONS = {
   ner_orgs: false,
   ner_threshold: 0.8,
   custom_terms: [],
+  only_custom: false,
   whitelist: [],
   pdf_dpi: 200,
   pdf_labels: true,
@@ -42,7 +44,7 @@ const POLL_MS = 250
 // Privacidad: las preferencias se guardan (prefs.json, vía backend), pero NUNCA los términos a
 // ocultar (suelen ser nombres de pacientes): sólo viven durante la sesión. El backend además
 // descarta cualquier clave que no esté en su lista (backend/appdata.py).
-function persistable({ custom_terms: _sessionOnly, ...rest }) {
+function persistable({ custom_terms: _sessionOnly, only_custom: _sessionMode, ...rest }) {
   return rest
 }
 
@@ -384,8 +386,9 @@ export default function App() {
       .filter((w, i, arr) => arr.indexOf(w) === i)
       .map((w) => t(`warnings.${w}`))
     if (result.ocr_pages) list.push(t('warnings.ocr_used', result.ocr_pages))
+    if (options.only_custom) list.unshift(t('censorOnlyWarning'))
     return list
-  }, [result, t])
+  }, [result, t, options.only_custom])
 
   const banner = message ?? (docWarnings.length ? { kind: 'warning', text: docWarnings.join(' ') } : null)
   const bannerStyles = {
@@ -430,6 +433,13 @@ export default function App() {
             pasteText={pasteText}
             onPasteTextChange={setPasteText}
             onSubmitText={submitText}
+          />
+          <CensorPanel
+            terms={options.custom_terms}
+            onlyCustom={!!options.only_custom}
+            onApply={(terms) => setOptions((o) => ({ ...o, custom_terms: terms }))}
+            onOnlyCustomChange={(v) => setOptions((o) => ({ ...o, only_custom: v }))}
+            entities={result?.entities}
           />
           <OptionsPanel options={options} onChange={setOptions} info={info} />
         </aside>
