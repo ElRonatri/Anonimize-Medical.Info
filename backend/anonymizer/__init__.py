@@ -4,7 +4,7 @@ from .detector import Options
 from .extract import ExtractionError, load_bytes, load_document, load_text
 from .pipeline import anonymize_document
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 __all__ = [
     "Options",
