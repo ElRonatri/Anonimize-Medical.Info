@@ -53,6 +53,16 @@ def make_pdf(name: str = NAME, *, title: str | None = None, annotation: str | No
     return out.getvalue()
 
 
+@pytest.fixture(scope="module")
+def sample_pdf(tmp_path_factory) -> bytes:
+    """Epicrisis ficticia de scripts/make_samples.py (samples/ no se versiona)."""
+    import make_samples
+
+    path = tmp_path_factory.mktemp("muestras") / "epicrisis_ejemplo.pdf"
+    make_samples.epicrisis_es(path)
+    return path.read_bytes()
+
+
 def render(data: bytes, scale: float = 1.0):
     return pdfium.PdfDocument(data)[0].render(scale=scale, draw_annots=False).to_pil().convert("L")
 
@@ -113,8 +123,8 @@ def test_output_has_no_text_metadata_or_annotations():
     assert "Vadremkuz" not in json.dumps(report)  # el informe nunca lleva valores
 
 
-def test_sample_epicrisis_end_to_end():
-    data = (ROOT / "samples" / "epicrisis_ejemplo.pdf").read_bytes()
+def test_sample_epicrisis_end_to_end(sample_pdf):
+    data = sample_pdf
     out, report = redact(data)
     src, dst = pdfium.PdfDocument(data), pdfium.PdfDocument(out)
     assert len(dst) == len(src) == report["pages"]
@@ -187,13 +197,13 @@ def test_scanned_page_is_redacted_with_ocr_boxes():
 
 # --------------------------------------------------------------------------- API
 
-def test_api_exports_pdf_only_for_pdf_documents(tmp_path, monkeypatch):
+def test_api_exports_pdf_only_for_pdf_documents(tmp_path, monkeypatch, sample_pdf):
     import appdata
     from api import Api
 
     monkeypatch.setenv(appdata.ENV_DATA_DIR, str(tmp_path / "datos"))
     api = Api()
-    sample = (ROOT / "samples" / "epicrisis_ejemplo.pdf").read_bytes()
+    sample = sample_pdf
     import base64
     import time
 
