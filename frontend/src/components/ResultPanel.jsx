@@ -66,6 +66,8 @@ export default function ResultPanel({
   onExport,
   onExportAll,
   doneCount,
+  pdfAvailable = false,
+  pdfCount = 0,
 }) {
   const { t } = useI18n()
   const [view, setView] = useState('preview')
@@ -113,7 +115,13 @@ export default function ResultPanel({
           </button>
         ))}
       </div>
-      <ExportMenu onExport={onExport} onExportAll={onExportAll} doneCount={doneCount} />
+      <ExportMenu
+        onExport={onExport}
+        onExportAll={onExportAll}
+        doneCount={doneCount}
+        pdfAvailable={pdfAvailable}
+        pdfCount={pdfCount}
+      />
       <Button variant="primary" onClick={onCopy} data-testid="copy-result">
         {copied ? <Check className="h-4 w-4" aria-hidden /> : <Copy className="h-4 w-4" aria-hidden />}
         {copied ? t('copied') : t('copy')}

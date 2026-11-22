@@ -51,9 +51,6 @@
   "regionHintKeywordsOnly": "Sin formato propio: se detectan documentos por palabra clave (p. ej. «CC 1020304050», «DNI 45678912») y pasaportes.",
   "optAggressive": "Ocultar cualquier número largo",
   "optAggressiveHint": "Secuencias de 7 o más dígitos (respeta las fechas). Puede ocultar valores clínicos.",
-  "customTerms": "Términos adicionales a ocultar",
-  "customTermsHint": "Uno por línea: nombres, instituciones u otros datos que no se detectaron. No se guardan al cerrar.",
-  "customTermsPlaceholder": "Ej.: Clínica Los Andes",
   "apply": "Aplicar",
   "dropTitleMulti": "Arrastra uno o varios PDF aquí",
   "addFiles": "Agregar archivos",
@@ -112,14 +109,15 @@
     "md": "Markdown (.md)",
     "txt": "Texto plano (.txt)",
     "docx": "Word (.docx)",
-    "json": "JSON (.json)"
+    "json": "JSON (.json)",
+    "pdf": "PDF censurado (.pdf)"
   },
   "exportedMany": {
     "one": "Se exportó {0} archivo.",
     "other": "Se exportaron {0} archivos."
   },
   "sectionDetection": "Detección",
-  "sectionTerms": "Términos personalizados",
+  "sectionTerms": "Excepciones",
   "sectionOutput": "Salida",
   "ocrTitle": "OCR (documentos escaneados)",
   "ocrMode": "Modo",
@@ -223,5 +221,37 @@
   "showOriginalHint": "Muestra en pantalla los valores originales en lugar de los marcadores, para revisar qué se ocultó. Copiar y exportar usan siempre el texto anonimizado.",
   "showingOriginal": "Mostrando los datos originales sólo para revisión: no compartas esta vista. Copiar y exportar siguen usando el texto anonimizado.",
   "viewMode": "Modo de vista",
-  "dismissMessage": "Cerrar aviso"
+  "dismissMessage": "Cerrar aviso",
+  "sectionPdf": "PDF censurado",
+  "pdfQuality": "Calidad de imagen",
+  "pdfQualityLight": "Liviana",
+  "pdfQualityStandard": "Estándar",
+  "pdfQualityHigh": "Alta",
+  "pdfLabels": "Mostrar el marcador sobre la censura",
+  "pdfLabelsHint": "Escribe [PACIENTE_1], [RUN_1]… dentro del recuadro negro, si cabe.",
+  "pdfHint": "Exportar → «PDF censurado» recrea cada PDF página por página con los datos tapados. Las páginas se guardan como imagen: el dato no queda oculto bajo el recuadro ni en el texto del archivo.",
+  "pdfSaved": "PDF censurado: {0} datos tapados en {1} páginas.",
+  "pdfUnlocated": "Revisa el PDF: {0} no se pudo ubicar en las páginas (sí se ocultó en el texto).",
+  "pdfPageErrors": "Algunas páginas no se pudieron analizar: revísalas.",
+  "pdfEditedIgnored": "Las ediciones manuales del texto no se aplican al PDF censurado.",
+  "pdfAnnotationsRemoved": {
+    "one": "Se omitió {0} anotación o campo de formulario.",
+    "other": "Se omitieron {0} anotaciones o campos de formulario."
+  },
+  "pdfSkipped": {
+    "one": "({0} documento sin PDF original no se exportó.)",
+    "other": "({0} documentos sin PDF original no se exportaron.)"
+  },
+  "censorTitle": "Palabras a censurar",
+  "censorLabel": "Una por línea: palabras o frases exactas que deben ocultarse",
+  "censorPlaceholder": "Ej.:\nJuan Pérez\nClínica Los Andes\n12345678",
+  "censorHint": "Se ocultan como [OCULTO] en el texto y en el PDF censurado, sin importar mayúsculas ni tildes, y sólo como palabra completa. No se guardan al cerrar.",
+  "censorFound": {
+    "one": "{0} coincidencia oculta en este documento.",
+    "other": "{0} coincidencias ocultas en este documento."
+  },
+  "censorMissing": "Sin coincidencias: {0}.",
+  "censorOnly": "Sólo estas palabras",
+  "censorOnlyHint": "Desactiva la detección automática: se censura exactamente tu lista.",
+  "censorOnlyWarning": "Detección automática desactivada: sólo se ocultan las palabras de tu lista. Nombres, RUT, teléfonos u otros datos que no estén en ella quedan visibles."
 }

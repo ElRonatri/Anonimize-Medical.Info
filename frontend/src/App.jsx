@@ -6,6 +6,7 @@ import OptionsPanel from './components/OptionsPanel.jsx'
 import ResultPanel from './components/ResultPanel.jsx'
 import EntitiesPanel from './components/EntitiesPanel.jsx'
 import JobProgress from './components/JobProgress.jsx'
+import CensorPanel from './components/CensorPanel.jsx'
 import ResponsibleUseDialog from './components/ResponsibleUseDialog.jsx'
 import { backend, copyText, getApi } from './api.js'
 import { useI18n } from './i18n.jsx'
@@ -29,15 +30,21 @@ const DEFAULT_OPTIONS = {
   ner_orgs: false,
   ner_threshold: 0.8,
   custom_terms: [],
+  only_custom: false,
   whitelist: [],
+  pdf_dpi: 200,
+  pdf_labels: true,
 }
+
+// Documento que proviene de un PDF (se puede recrear censurado página por página).
+const isPdfItem = (item) => item?.kind === 'file' && /\.pdf$/i.test(item?.name || '')
 
 const POLL_MS = 250
 
 // Privacidad: las preferencias se guardan (prefs.json, vía backend), pero NUNCA los términos a
 // ocultar (suelen ser nombres de pacientes): sólo viven durante la sesión. El backend además
 // descarta cualquier clave que no esté en su lista (backend/appdata.py).
-function persistable({ custom_terms: _sessionOnly, ...rest }) {
+function persistable({ custom_terms: _sessionOnly, only_custom: _sessionMode, ...rest }) {
   return rest
 }
 
@@ -111,7 +118,12 @@ export default function App() {
     [options, excluded],
   )
   // max_workers sólo afecta a lotes nuevos: no requiere re-anonimizar lo ya procesado.
-  const optionsKey = JSON.stringify({ ...requestOptions, max_workers: undefined })
+  const optionsKey = JSON.stringify({
+    ...requestOptions,
+    max_workers: undefined,
+    pdf_dpi: undefined, // sólo afectan al PDF censurado, no al texto
+    pdf_labels: undefined,
+  })
 
   // ---------------------------------------------------------------- utilidades de estado
   const errorText = useCallback(
@@ -317,10 +329,34 @@ export default function App() {
     }
   }
 
+  // Informe del PDF censurado: lo que el usuario debe revisar (sin valores, sólo marcadores).
+  const pdfReportMessage = (report, prefix) => {
+    const notes = [prefix, t('pdfSaved', report.redactions ?? 0, report.pages ?? 0)]
+    let kind = 'success'
+    if (report.unlocated?.length) {
+      notes.push(t('pdfUnlocated', report.unlocated.join(', ')))
+      kind = 'warning'
+    }
+    if (report.page_errors?.length || report.page_errors > 0) {
+      notes.push(t('pdfPageErrors'))
+      kind = 'warning'
+    }
+    if (report.edited_ignored) {
+      notes.push(t('pdfEditedIgnored'))
+      kind = 'warning'
+    }
+    if (report.annotations_removed) notes.push(t('pdfAnnotationsRemoved', report.annotations_removed))
+    const reminder = takeReminder()
+    if (reminder) notes.push(reminder)
+    return { kind, text: notes.filter(Boolean).join(' ') }
+  }
+
   const exportOne = async (fmt) => {
     if (!selected || !result) return
     const res = await backend.exportFile(docPayload(selected), fmt, requestOptions)
-    if (res?.ok) {
+    if (res?.ok && fmt === 'pdf' && res.report) {
+      setMessage(pdfReportMessage(res.report, ''))
+    } else if (res?.ok) {
       const reminder = takeReminder()
       if (reminder) setMessage({ kind: 'info', text: reminder })
     } else if (!res?.cancelled) setMessage({ kind: 'error', text: errorText(res?.error) })
@@ -328,7 +364,10 @@ export default function App() {
 
   const exportAll = async (fmt, generic) => {
     const res = await backend.exportBatch(doneItems.map(docPayload), fmt, requestOptions, generic)
-    if (res?.ok) {
+    if (res?.ok && fmt === 'pdf' && res.report) {
+      const skipped = res.skipped ? t('pdfSkipped', res.skipped) : ''
+      setMessage(pdfReportMessage(res.report, `${t('exportedMany', res.count)} ${res.folder} ${skipped}`.trim()))
+    } else if (res?.ok) {
       const reminder = takeReminder()
       const done = `${t('exportedMany', res.count)} ${res.folder}`
       setMessage({ kind: 'success', text: reminder ? `${done} ${reminder}` : done })
@@ -347,8 +386,9 @@ export default function App() {
       .filter((w, i, arr) => arr.indexOf(w) === i)
       .map((w) => t(`warnings.${w}`))
     if (result.ocr_pages) list.push(t('warnings.ocr_used', result.ocr_pages))
+    if (options.only_custom) list.unshift(t('censorOnlyWarning'))
     return list
-  }, [result, t])
+  }, [result, t, options.only_custom])
 
   const banner = message ?? (docWarnings.length ? { kind: 'warning', text: docWarnings.join(' ') } : null)
   const bannerStyles = {
@@ -394,6 +434,13 @@ export default function App() {
             onPasteTextChange={setPasteText}
             onSubmitText={submitText}
           />
+          <CensorPanel
+            terms={options.custom_terms}
+            onlyCustom={!!options.only_custom}
+            onApply={(terms) => setOptions((o) => ({ ...o, custom_terms: terms }))}
+            onOnlyCustomChange={(v) => setOptions((o) => ({ ...o, only_custom: v }))}
+            entities={result?.entities}
+          />
           <OptionsPanel options={options} onChange={setOptions} info={info} />
         </aside>
 
@@ -434,6 +481,8 @@ export default function App() {
             onExport={exportOne}
             onExportAll={exportAll}
             doneCount={doneItems.length}
+            pdfAvailable={isPdfItem(selected)}
+            pdfCount={doneItems.filter(isPdfItem).length}
           />
 
           {result && (

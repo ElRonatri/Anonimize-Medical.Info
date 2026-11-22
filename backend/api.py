@@ -25,6 +25,7 @@ from anonymizer import ExtractionError, __version__, anonymize_document, identif
 from anonymizer.document import Document
 from anonymizer.exporters import FORMATS, export_bytes
 from anonymizer.privacy import log_exception
+from anonymizer.redact_pdf import ALLOWED_DPI, DEFAULT_DPI, redact_pdf
 from appdata import PrefStore
 
 # Respuestas y argumentos JSON intercambiados con la interfaz (PyWebView).
@@ -33,6 +34,10 @@ JSONDict = dict[str, Any]
 log = logging.getLogger(__name__)
 
 MAX_FILE_BYTES = 80 * 1024 * 1024  # 80 MB por archivo
+
+# Formatos de exportación: los de texto (exporters.FORMATS) y el PDF censurado (página por página).
+PDF_FORMAT = "pdf"
+EXPORT_FORMATS: dict[str, tuple[str, str]] = {**FORMATS, PDF_FORMAT: ("PDF censurado", ".pdf")}
 # Arrancar procesos cuesta ~0,2-0,4 s; con PDFs de texto livianos (KB) el lote entero tarda menos.
 # Se usa paralelo con OCR forzado, con lotes grandes (los escaneos pesan cientos de KB por página)
 # o si los procesos ya están activos. Medición en docs/benchmarks.md.
@@ -47,6 +52,18 @@ def _dialog_type(name: str) -> Any:
     if file_dialog is not None:
         return getattr(file_dialog, name)
     return getattr(webview, f"{name}_DIALOG")
+
+
+def _merge_pdf_reports(reports: list[JSONDict]) -> JSONDict:
+    """Resumen de varios informes de PDF censurado (sin valores, sólo marcadores y conteos)."""
+    return {
+        "pages": sum(r.get("pages", 0) for r in reports),
+        "redactions": sum(r.get("redactions", 0) for r in reports),
+        "annotations_removed": sum(r.get("annotations_removed", 0) for r in reports),
+        "unlocated": sorted({u for r in reports for u in r.get("unlocated", [])}),
+        "page_errors": sum(len(r.get("page_errors", [])) for r in reports),
+        "edited_ignored": any(r.get("edited_ignored") for r in reports),
+    }
 
 
 def _file_size(path: str | None) -> int:
@@ -162,7 +179,8 @@ class Api:
             "ocr_available": ocr.available(),
             "regions": {k: list(v) for k, v in identifiers.REGIONES.items()},
             "country_formats": identifiers.formatos_por_pais(),
-            "export_formats": list(FORMATS),
+            "export_formats": list(EXPORT_FORMATS),
+            "pdf_dpi": {"allowed": list(ALLOWED_DPI), "default": DEFAULT_DPI},
             "ner": ner.info(),
             "cpu_count": parallel.cpu_count(),
             "default_workers": parallel.default_workers(),
@@ -549,11 +567,13 @@ class Api:
 
     def export_file(self, document: JSONDict, fmt: str = "md", options: JSONDict | None = None) -> JSONDict:
         """Guarda un resultado. `document`: {"id", "name", "text", "edited", "meta"}."""
-        if fmt not in FORMATS:
+        if fmt not in EXPORT_FORMATS:
             return _error("unsupported_format", fmt)
         if self._window is None:
             return _error("no_window")
-        label, ext = FORMATS[fmt]
+        if fmt == PDF_FORMAT and self._pdf_source(document) is None:
+            return _error("not_pdf")
+        label, ext = EXPORT_FORMATS[fmt]
         result = self._window.create_file_dialog(
             _dialog_type("SAVE"),
             save_filename=f"{safe_stem(document.get('name'))}_anonimizado{ext}",
@@ -564,6 +584,8 @@ class Api:
         target = Path(result[0] if isinstance(result, (list, tuple)) else str(result))
         if target.suffix.lower() != ext:
             target = target.with_name(target.name + ext)
+        if fmt == PDF_FORMAT:
+            return self._write_redacted_pdf(target, document, options)
         text, meta = self._content(document, fmt, options)
         meta.setdefault("name", document.get("name"))
         return self._write(target, fmt, text, meta)
@@ -571,7 +593,7 @@ class Api:
     def export_batch(self, documents: list[JSONDict], fmt: str = "md", options: JSONDict | None = None,
                      generic_names: bool = False) -> JSONDict:
         """Exporta varios resultados a una carpeta elegida por el usuario."""
-        if fmt not in FORMATS:
+        if fmt not in EXPORT_FORMATS:
             return _error("unsupported_format", fmt)
         if self._window is None:
             return _error("no_window")
@@ -583,13 +605,18 @@ class Api:
 
     def export_to_folder(self, folder: str, documents: list[JSONDict], fmt: str,
                          options: JSONDict | None = None, generic_names: bool = False) -> JSONDict:
-        if fmt not in FORMATS:
+        if fmt not in EXPORT_FORMATS:
             return _error("unsupported_format", fmt)
         folder_path = Path(folder)
-        _, ext = FORMATS[fmt]
+        _, ext = EXPORT_FORMATS[fmt]
         written: list[str] = []
         used: set[str] = set()
+        skipped = 0
+        reports: list[JSONDict] = []
         for index, document in enumerate(documents or [], start=1):
+            if fmt == PDF_FORMAT and self._pdf_source(document) is None:
+                skipped += 1  # texto pegado o .txt: no hay PDF que recrear
+                continue
             # Los nombres originales suelen incluir el nombre del paciente: opción genérica.
             stem = f"documento_{index:02d}" if generic_names else safe_stem(document.get("name"))
             stem = f"{stem}_anonimizado"
@@ -597,13 +624,59 @@ class Api:
             while candidate.lower() in used or (folder_path / f"{candidate}{ext}").exists():
                 candidate, n = f"{stem}_{n}", n + 1
             used.add(candidate.lower())
-            text, meta = self._content(document, fmt, options)
-            meta["name"] = f"{candidate}{ext}" if generic_names else document.get("name")
-            res = self._write(folder_path / f"{candidate}{ext}", fmt, text, meta)
+            if fmt == PDF_FORMAT:
+                res = self._write_redacted_pdf(folder_path / f"{candidate}{ext}", document, options)
+                if res.get("ok"):
+                    reports.append(res["report"])
+            else:
+                text, meta = self._content(document, fmt, options)
+                meta["name"] = f"{candidate}{ext}" if generic_names else document.get("name")
+                res = self._write(folder_path / f"{candidate}{ext}", fmt, text, meta)
             if not res.get("ok"):
                 return {**res, "written": written}
             written.append(res["path"])
-        return {"ok": True, "folder": str(folder_path), "count": len(written), "written": written}
+        out: JSONDict = {"ok": True, "folder": str(folder_path), "count": len(written), "written": written}
+        if fmt == PDF_FORMAT:
+            out["skipped"] = skipped
+            out["report"] = _merge_pdf_reports(reports)
+        return out
+
+    # ------------------------------------------------------------------ PDF censurado
+    def _pdf_source(self, document: JSONDict) -> tuple[Item, bytes] | None:
+        """El elemento y los bytes del PDF original, si el documento proviene de un PDF."""
+        with self._lock:
+            item = self._items.get(document.get("id") or "")
+        if item is None or item.doc is None or (item.data is None and not item.path):
+            return None  # p. ej. texto pegado: no hay PDF original
+        try:
+            data = item.data if item.data is not None else parallel.read_source(item.path, None)
+        except (OSError, ValueError, ExtractionError):
+            return None
+        return (item, data) if data[:5] == b"%PDF-" else None
+
+    def _write_redacted_pdf(self, target: Path, document: JSONDict, options: JSONDict | None) -> JSONDict:
+        source = self._pdf_source(document)
+        if source is None:
+            return _error("not_pdf")
+        item, data = source
+        assert item.doc is not None
+        opts = dict(options or {})
+        try:
+            dpi = int(opts.get("pdf_dpi", DEFAULT_DPI))
+        except (TypeError, ValueError):
+            dpi = DEFAULT_DPI
+        try:
+            pdf, report = redact_pdf(data, item.doc, opts, dpi=dpi, labels=bool(opts.get("pdf_labels", True)))
+        except Exception as exc:
+            log_exception(log, "Error generando el PDF censurado", exc)
+            return _error("process_error", str(exc))
+        # Las ediciones manuales del texto no se pueden trasladar al PDF: se avisa.
+        report["edited_ignored"] = bool(document.get("edited"))
+        try:
+            target.write_bytes(pdf)
+        except OSError as exc:
+            return _error("write_error", str(exc))
+        return {"ok": True, "path": str(target), "report": report}
 
     @staticmethod
     def _write(target: Path, fmt: str, content: str, meta: JSONDict | None) -> JSONDict:

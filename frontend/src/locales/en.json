@@ -51,9 +51,6 @@
   "regionHintKeywordsOnly": "No dedicated format: documents are detected by keyword (e.g. “CC 1020304050”, “DNI 45678912”) and passports.",
   "optAggressive": "Hide any long number",
   "optAggressiveHint": "Sequences of 7+ digits (dates are kept). May hide clinical values.",
-  "customTerms": "Additional terms to hide",
-  "customTermsHint": "One per line: names, institutions or other data that was not detected. Not saved on exit.",
-  "customTermsPlaceholder": "e.g. Mercy General Hospital",
   "apply": "Apply",
   "dropTitleMulti": "Drop one or more PDFs here",
   "addFiles": "Add files",
@@ -112,14 +109,15 @@
     "md": "Markdown (.md)",
     "txt": "Plain text (.txt)",
     "docx": "Word (.docx)",
-    "json": "JSON (.json)"
+    "json": "JSON (.json)",
+    "pdf": "Redacted PDF (.pdf)"
   },
   "exportedMany": {
     "one": "{0} file exported.",
     "other": "{0} files exported."
   },
   "sectionDetection": "Detection",
-  "sectionTerms": "Custom terms",
+  "sectionTerms": "Exceptions",
   "sectionOutput": "Output",
   "ocrTitle": "OCR (scanned documents)",
   "ocrMode": "Mode",
@@ -223,5 +221,37 @@
   "showOriginalHint": "Shows the original values instead of the placeholders, to review what was hidden. Copy and export always use the anonymized text.",
   "showingOriginal": "Showing original data for review only: do not share this view. Copy and export still use the anonymized text.",
   "viewMode": "View mode",
-  "dismissMessage": "Dismiss message"
+  "dismissMessage": "Dismiss message",
+  "sectionPdf": "Redacted PDF",
+  "pdfQuality": "Image quality",
+  "pdfQualityLight": "Light",
+  "pdfQualityStandard": "Standard",
+  "pdfQualityHigh": "High",
+  "pdfLabels": "Show the placeholder on the redaction",
+  "pdfLabelsHint": "Writes [PATIENT_1], [ID_1]… inside the black box, if it fits.",
+  "pdfHint": "Export → “Redacted PDF” recreates each PDF page by page with the data covered. Pages are saved as images: the data is not hidden under the box nor left in the file's text.",
+  "pdfSaved": "Redacted PDF: {0} items covered on {1} pages.",
+  "pdfUnlocated": "Review the PDF: {0} could not be located on the pages (it was hidden in the text).",
+  "pdfPageErrors": "Some pages could not be analyzed: review them.",
+  "pdfEditedIgnored": "Manual edits to the text are not applied to the redacted PDF.",
+  "pdfAnnotationsRemoved": {
+    "one": "{0} annotation or form field was omitted.",
+    "other": "{0} annotations or form fields were omitted."
+  },
+  "pdfSkipped": {
+    "one": "({0} document without an original PDF was not exported.)",
+    "other": "({0} documents without an original PDF were not exported.)"
+  },
+  "censorTitle": "Words to redact",
+  "censorLabel": "One per line: exact words or phrases to hide",
+  "censorPlaceholder": "E.g.:\nJohn Smith\nSt. Mary Clinic\n12345678",
+  "censorHint": "Hidden as [REDACTED] in the text and in the redacted PDF, regardless of case or accents, whole words only. Not saved on exit.",
+  "censorFound": {
+    "one": "{0} match hidden in this document.",
+    "other": "{0} matches hidden in this document."
+  },
+  "censorMissing": "No matches: {0}.",
+  "censorOnly": "Only these words",
+  "censorOnlyHint": "Turns off automatic detection: exactly your list is redacted.",
+  "censorOnlyWarning": "Automatic detection is off: only the words in your list are hidden. Names, IDs, phones or other data not in it remain visible."
 }

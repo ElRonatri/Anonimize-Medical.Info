@@ -11,7 +11,7 @@ CI de Windows con el ejecutable real (ver [Verificación](#verificación)).
 |---|---|---|---|
 | Preferencias | `%APPDATA%\AnonimizeMedical\prefs.json` | idioma, tema, opciones, lista de excepciones, «no volver a mostrar» el aviso | se conserva |
 | Perfil de WebView2 | `%LOCALAPPDATA%\AnonimizeMedical\WebView2` | lo que el motor de la ventana necesite (caché, Local Storage, IndexedDB, Service Workers, Crashpad) | **se borra**; si quedó tras un fallo, se borra al iniciar |
-| Exportaciones | donde el usuario elija | texto anonimizado | del usuario |
+| Exportaciones | donde el usuario elija | texto anonimizado, o PDF censurado (sólo imágenes de las páginas con los datos tapados) | del usuario |
 
 Nada más: no hay archivos temporales ni de log (una prueba revisa que el backend no use
 `tempfile` ni manejadores de log a archivo).

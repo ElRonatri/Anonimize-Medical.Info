@@ -164,6 +164,23 @@ def _ocr_works(engine: str) -> bool:
     return any(p.ocr for p in doc.pages) and "prueba" in text and "hemoglobina" in text
 
 
+def _redacted_pdf_works() -> bool:
+    """PDF censurado: el nombre se tapa y la salida no conserva texto (sin red ni archivos)."""
+    import pypdfium2 as pdfium
+
+    from anonymizer import load_bytes
+    from anonymizer.redact_pdf import redact_pdf, synthetic_text_pdf
+
+    data = synthetic_text_pdf(["Nombre: Juana Prueba Ficticia", "Hemoglobina 13.1 g/dL"])
+    out, report = redact_pdf(data, load_bytes("autoprueba.pdf", data, ocr_mode="off"), {}, dpi=150)
+    doc = pdfium.PdfDocument(out)
+    try:
+        no_text = all(doc[i].get_textpage().get_text_range() == "" for i in range(len(doc)))
+    finally:
+        doc.close()
+    return no_text and report["redactions"] >= 1 and not report["unlocated"] and b"Ficticia" not in out
+
+
 def _ner_works() -> bool:
     """La pasada NER oculta un nombre SIN etiqueta (que las reglas no detectan), sin red."""
     from anonymizer import anonymize_document, load_text, ner
@@ -198,6 +215,7 @@ def self_test(expect_ocr: str | None = None, expect_ner: bool = False) -> dict[s
                                and identifiers.anonimizar("RUN 12.345.678-5") == "RUN [RUN_CL]")
     checks["network_blocked"] = _network_is_blocked()
     checks["parallel_batch"] = _parallel_batch_works()
+    checks["redacted_pdf"] = _redacted_pdf_works()
     if expect_ocr:
         checks[f"ocr_{expect_ocr}"] = _ocr_works(expect_ocr)
     if expect_ner:

@@ -16,9 +16,10 @@ epicrisis, informes, etc.), **anonimiza los datos del paciente** y devuelve el r
 | | |
 |---|---|
 | Entrada | **varios PDF a la vez** (arrastrar y soltar o diálogo nativo), TXT, o texto pegado. Se procesan en cola y **en paralelo** (procesos configurables), con avance por archivo y página, tiempo restante estimado y cancelación inmediata |
-| Salida | Markdown (títulos, listas, tablas de laboratorio) o texto plano; copiar o **exportar a `.md`, `.txt`, Word `.docx` o `.json`**, un documento o todos a una carpeta (con nombres genéricos opcionales) |
+| Salida | Markdown (títulos, listas, tablas de laboratorio) o texto plano; copiar o **exportar a `.md`, `.txt`, Word `.docx` o `.json`**, un documento o todos a una carpeta (con nombres genéricos opcionales). **PDF censurado:** el mismo PDF, página por página, con los datos tapados de forma irreversible ([docs/pdf-censurado.md](docs/pdf-censurado.md)) |
 | Datos detectados | nombre del paciente, familiares y contactos, RUT/RUN, DNI, NIE, CURP, cédula, SSN, pasaporte, N° de ficha / historia clínica / MRN, fecha de nacimiento, teléfonos, correos, direcciones y localidades, URLs, IPs |
-| Opcional | nombres de profesionales (médicos, firmantes), todas las fechas, términos personalizados a ocultar |
+| Palabras a censurar | caja para escribir exactamente qué palabras o frases ocultar, además de la detección automática o **sólo esas** (modo «Sólo estas palabras», con aviso); también en el PDF censurado |
+| Opcional | nombres de profesionales (médicos, firmantes), todas las fechas |
 | Excepciones | lista de términos que **nunca** se anonimizan (instituciones, fármacos, palabras ocultadas por error) |
 | Detección con IA (opcional) | variante `--ner`: segunda pasada con spaCy para nombres **sin etiqueta** y, si se desea, organizaciones; con umbral de confianza y filtro clínico ([docs/ner.md](docs/ner.md)) |
 | Por país (opcional) | selector de región/país: formatos validados con dígito verificador (RUN/RUT, CUIL, CPF, CNS, CURP, RFC, CI de Venezuela/Uruguay/Ecuador, SSN, MBI, SIN, DNI/NIE, NIR, Codice Fiscale, NINO, NHS, personnummer, HETU, AHV, Aadhaar, PAN, ID china, RRN, NRIC, HKID, CNIC, Emirates ID), pasaportes MRZ y más de 150 palabras clave de documentos de todo el mundo |
@@ -47,7 +48,7 @@ epicrisis, informes, etc.), **anonimiza los datos del paciente** y devuelve el r
    conservan.
 
 > ⚠️ La detección es automática y basada en reglas: **revisa siempre el resultado antes de
-> compartirlo**. Usa *Términos adicionales a ocultar* para lo que no se haya detectado.
+> compartirlo**. Usa *Palabras a censurar* para lo que no se haya detectado.
 
 ### Identificadores por país
 

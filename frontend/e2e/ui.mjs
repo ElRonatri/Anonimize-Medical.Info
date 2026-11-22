@@ -51,6 +51,26 @@ export default async function ui({ browser, url, fixture, check, screenshots }) 
       const fmt = await page.evaluate(() => window.__calls.filter((c) => c[0] === 'export_file').map((c) => c[1][1]).pop())
       check(fmt === 'txt', `Enter exporta la opción enfocada (${fmt})`)
 
+      // PDF censurado: sólo para documentos que vienen de un PDF (aquí, texto pegado).
+      await page.getByRole('button', { name: 'Exportar' }).click()
+      check((await page.getByRole('menuitem', { name: /PDF censurado/ }).count()) === 0, 'sin «PDF censurado» para texto pegado')
+      await page.keyboard.press('Escape')
+      check((await page.getByText('Calidad de imagen').count()) === 1, 'opciones del PDF censurado visibles')
+
+      // Palabras a censurar: se envían al backend, no se guardan y avisan si no aparecen.
+      await page.fill('[data-testid=censor-terms]', 'Clínica Los Andes\nNeumonía')
+      await page.click('[data-testid=censor-apply]')
+      await page.waitForTimeout(800) // re-anonimización con las nuevas opciones
+      const sent = await page.evaluate(() => window.__calls.filter((c) => c[0] === 'reprocess').map((c) => c[1][0]).pop())
+      check(JSON.stringify(sent?.custom_terms) === JSON.stringify(['Clínica Los Andes', 'Neumonía']), 'las palabras se envían al backend')
+      check((await page.getByTestId('censor-stats').innerText()).includes('Sin coincidencias'), 'avisa las palabras sin coincidencias')
+      await page.getByText('Sólo estas palabras').click()
+      await page.waitForTimeout(800)
+      check((await page.getByText('Detección automática desactivada').count()) >= 1, 'aviso visible con «Sólo estas palabras»')
+      const stored = await page.evaluate(() => localStorage.getItem('__mock_prefs_json') || '{}')
+      check(!stored.includes('Clínica') && !stored.includes('only_custom'), 'ni las palabras ni el modo se guardan')
+      await page.getByText('Sólo estas palabras').click()
+
       const row = page.locator('li:has(button[aria-current])')
       check((await row.locator('button').count()) === 2 && (await row.locator('[role=button]').count()) === 0, 'fila de documento sin controles anidados')
       check((await row.locator('button').nth(1).getAttribute('aria-label')).startsWith('Quitar'), 'botón quitar nombra el documento')

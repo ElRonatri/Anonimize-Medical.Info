@@ -254,3 +254,89 @@ def _ocr_rapid(pdf_page: PdfPage, resolution: int = 200) -> list[str]:
         else:
             lines.append([item])
     return ["   ".join(t for *_, t in sorted(line, key=lambda i: i[1])) for line in lines]
+
+
+# --------------------------------------------------------------------------- palabras con posición
+
+# (texto, x0, top, x1, bottom) en puntos PDF, en el mismo sistema de coordenadas que pdfplumber.
+OcrWord = tuple[str, float, float, float, float]
+
+
+def ocr_word_lines(pdf_page: PdfPage, engine: str | None = None) -> list[list[OcrWord]]:
+    """Palabras reconocidas con su caja, agrupadas por línea (para censurar páginas escaneadas)."""
+    engine = pick_engine(engine)
+    if engine == TESSERACT:
+        return _words_tesseract(pdf_page)
+    if engine == RAPIDOCR:
+        return _words_rapid(pdf_page)
+    raise RuntimeError("no_ocr_engine")
+
+
+def _to_points(pdf_page: PdfPage, resolution: int) -> tuple[float, float, float]:
+    """Escala píxel -> punto y origen de la imagen renderizada por pdfplumber."""
+    x0, top = float(pdf_page.bbox[0]), float(pdf_page.bbox[1])
+    return 72.0 / resolution, x0, top
+
+
+def _words_tesseract(pdf_page: PdfPage, resolution: int = 300) -> list[list[OcrWord]]:
+    image = pdf_page.to_image(resolution=resolution).original.convert("L")
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    proc = _run_tesseract(["stdin", "stdout", "-l", tesseract_languages(), "--psm", "3", "tsv"],
+                          data=buffer.getvalue())
+    if proc.returncode != 0:
+        raise RuntimeError(f"tesseract_exit_{proc.returncode}")
+    scale, ox, oy = _to_points(pdf_page, resolution)
+    lines: dict[tuple[int, int, int], list[OcrWord]] = {}
+    for row in proc.stdout.decode("utf-8", "replace").splitlines()[1:]:
+        cols = row.split("\t")
+        if len(cols) < 12 or cols[0] != "5" or not cols[11].strip():
+            continue
+        left, top, width, height = (int(c) for c in cols[6:10])
+        key = (int(cols[2]), int(cols[3]), int(cols[4]))  # bloque, párrafo, línea
+        lines.setdefault(key, []).append((
+            cols[11], ox + left * scale, oy + top * scale,
+            ox + (left + width) * scale, oy + (top + height) * scale))
+    return [sorted(words, key=lambda w: w[1]) for _, words in sorted(lines.items())]
+
+
+def _words_rapid(pdf_page: PdfPage, resolution: int = 200) -> list[list[OcrWord]]:
+    import numpy as np
+
+    image = pdf_page.to_image(resolution=resolution).original.convert("RGB")
+    result = _get_rapid()(np.array(image))
+    pairs: Iterable[tuple[Any, Any]]
+    if hasattr(result, "boxes"):
+        boxes = result.boxes if result.boxes is not None else []
+        pairs = zip(boxes, result.txts or [], strict=False)
+    else:
+        raw = result[0] if isinstance(result, tuple) else result
+        pairs = ((r[0], r[1]) for r in (raw or []))
+    scale, ox, oy = _to_points(pdf_page, resolution)
+    lines: list[list[OcrWord]] = []
+    for box, text in pairs:
+        xs = [float(p[0]) for p in box]
+        ys = [float(p[1]) for p in box]
+        x0, x1 = ox + min(xs) * scale, ox + max(xs) * scale
+        top, bottom = oy + min(ys) * scale, oy + max(ys) * scale
+        text = str(text)
+        # RapidOCR entrega un tramo de texto por caja: se reparte el ancho en proporción a los caracteres.
+        words, pos, step = [], 0, (x1 - x0) / max(len(text), 1)
+        for part in text.split(" "):
+            if part:
+                words.append((part, x0 + pos * step, top, x0 + (pos + len(part)) * step, bottom))
+            pos += len(part) + 1
+        if words:
+            lines.append(words)
+    # Cajas de la misma línea visual (p. ej. "Nombre:" y el valor) se unen, como en _ocr_rapid.
+    lines.sort(key=lambda ws: (ws[0][2] + ws[0][4]) / 2)
+    merged: list[list[OcrWord]] = []
+    for words in lines:
+        center, height = (words[0][2] + words[0][4]) / 2, words[0][4] - words[0][2]
+        if merged:
+            last = merged[-1][0]
+            if abs((last[2] + last[4]) / 2 - center) < max(height, 1.0) * 0.5:
+                merged[-1].extend(words)
+                continue
+        merged.append(list(words))
+    return [sorted(ws, key=lambda w: w[1]) for ws in merged]

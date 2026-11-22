@@ -12,6 +12,13 @@ from .render import render, strip_repeated_lines
 
 
 def anonymize_document(doc: Document, options: dict[str, Any] | Options | None = None) -> dict[str, Any]:
+    return anonymize_with_redactor(doc, options)[0]
+
+
+def anonymize_with_redactor(doc: Document, options: dict[str, Any] | Options | None = None,
+                            ) -> tuple[dict[str, Any], Redactor]:
+    """Como `anonymize_document`, pero también devuelve el `Redactor` ya usado (con la numeración
+    de marcadores asignada), para aplicar exactamente las mismas decisiones a otra salida."""
     started = time.perf_counter()
     opts = options if isinstance(options, Options) else Options.from_dict(options)
 
@@ -42,4 +49,4 @@ def anonymize_document(doc: Document, options: dict[str, Any] | Options | None =
         "ner": knowledge.ner_summary,
         "characters": len(full_text),
         "elapsed_ms": int((time.perf_counter() - started) * 1000),
-    }
+    }, redactor
