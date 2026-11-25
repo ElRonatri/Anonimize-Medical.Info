@@ -7,6 +7,19 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-22
+
+**PDF censurado** (el mismo PDF, página por página, con los datos tapados de forma irreversible) y
+caja **«Palabras a censurar»** para indicar exactamente qué ocultar.
+
+**Importante — actualiza si procesas PDF con páginas giradas:** en la 1.1.0, las páginas con
+`/Rotate` (p. ej. informes apaisados) se extraían desordenadas o al revés y los nombres del paciente
+**podían quedar visibles en el texto exportado**. Revisa los textos de ese tipo de PDF generados con
+versiones anteriores.
+
+**Al actualizar desde 1.1.0:** la lista «Términos adicionales a ocultar» pasó a la caja «Palabras a
+censurar», junto al documento (sigue sin guardarse al cerrar).
+
 ### Añadido
 - **PDF censurado** (Exportar → «PDF censurado»): recrea cada PDF página por página, con el mismo
   tamaño y aspecto, y tapa con recuadros negros (opcionalmente con su marcador) los mismos datos que
